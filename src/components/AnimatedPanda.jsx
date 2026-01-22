@@ -3,41 +3,15 @@ import { useFrame } from '@react-three/fiber'
 import { FBXLoader } from 'three/examples/jsm/loaders/FBXLoader'
 import * as THREE from 'three'
 
-// Helper function to retarget animation tracks to match skeleton
-function retargetAnimation(clip, sourceSkeleton, targetSkeleton) {
-  // Get bone names from target skeleton
-  const targetBoneNames = new Set()
-  targetSkeleton.traverse((child) => {
-    if (child.isBone) {
-      targetBoneNames.add(child.name)
-    }
+// Helper function to fix bone names in animation tracks
+// Mixamo animations use "mixamorig:BoneName" but model has "mixamorigBoneName"
+function fixAnimationTrackNames(clip) {
+  const newTracks = clip.tracks.map(track => {
+    const newTrack = track.clone()
+    // Replace "mixamorig:" with "mixamorig" (remove the colon)
+    newTrack.name = track.name.replace(/mixamorig:/g, 'mixamorig')
+    return newTrack
   })
-  
-  // Clone the clip and fix track names
-  const newTracks = []
-  for (const track of clip.tracks) {
-    // Track names are like "boneName.position" or "boneName.quaternion"
-    const parts = track.name.split('.')
-    const boneName = parts[0]
-    const property = parts.slice(1).join('.')
-    
-    // Check if target has this bone
-    if (targetBoneNames.has(boneName)) {
-      newTracks.push(track.clone())
-    } else {
-      // Try to find matching bone (sometimes prefix differs)
-      const simpleName = boneName.replace('mixamorig:', '').replace('mixamorig', '')
-      for (const targetName of targetBoneNames) {
-        const simpleTarget = targetName.replace('mixamorig:', '').replace('mixamorig', '')
-        if (simpleName === simpleTarget || targetName.includes(simpleName) || simpleName.includes(targetName)) {
-          const newTrack = track.clone()
-          newTrack.name = targetName + '.' + property
-          newTracks.push(newTrack)
-          break
-        }
-      }
-    }
-  }
   
   return new THREE.AnimationClip(clip.name, clip.duration, newTracks)
 }
@@ -63,24 +37,17 @@ export function AnimatedPanda({ isMoving, hasWon, scale = 0.0075 }) {
       fbx.scale.setScalar(scale)
       fbx.rotation.y = Math.PI
       
-      // Log skeleton bones for debugging
-      console.log('Model bones:')
-      fbx.traverse((child) => {
-        if (child.isBone) {
-          console.log(' -', child.name)
-        }
-      })
-      
       // Create animation mixer
       mixerRef.current = new THREE.AnimationMixer(fbx)
       modelRef.current = fbx
       
-      // Store idle animation
+      // Store idle animation (fix track names)
       if (fbx.animations.length > 0) {
-        console.log('Idle animation tracks:', fbx.animations[0].tracks.map(t => t.name))
-        const action = mixerRef.current.clipAction(fbx.animations[0])
+        const fixedClip = fixAnimationTrackNames(fbx.animations[0])
+        const action = mixerRef.current.clipAction(fixedClip)
         actionsRef.current.idle = action
         action.play()
+        console.log('Idle animation loaded and playing')
       }
       
       // Add model to group
@@ -93,12 +60,10 @@ export function AnimatedPanda({ isMoving, hasWon, scale = 0.0075 }) {
         if (!mounted) return
         
         if (walkFbx.animations.length > 0 && mixerRef.current) {
-          console.log('Walk animation tracks:', walkFbx.animations[0].tracks.map(t => t.name))
-          
-          // Try to retarget the animation
-          const retargetedClip = retargetAnimation(walkFbx.animations[0], walkFbx, fbx)
-          const action = mixerRef.current.clipAction(retargetedClip)
+          const fixedClip = fixAnimationTrackNames(walkFbx.animations[0])
+          const action = mixerRef.current.clipAction(fixedClip)
           actionsRef.current.walk = action
+          console.log('Walk animation loaded')
         }
         
         // Load dance animation
@@ -106,11 +71,13 @@ export function AnimatedPanda({ isMoving, hasWon, scale = 0.0075 }) {
           if (!mounted) return
           
           if (danceFbx.animations.length > 0 && mixerRef.current) {
-            const retargetedClip = retargetAnimation(danceFbx.animations[0], danceFbx, fbx)
-            const action = mixerRef.current.clipAction(retargetedClip)
+            const fixedClip = fixAnimationTrackNames(danceFbx.animations[0])
+            const action = mixerRef.current.clipAction(fixedClip)
             actionsRef.current.dance = action
+            console.log('Dance animation loaded')
           }
           setLoaded(true)
+          console.log('All animations loaded!')
         })
       })
     })
@@ -140,14 +107,16 @@ export function AnimatedPanda({ isMoving, hasWon, scale = 0.0075 }) {
     }
     
     if (targetAnim !== currentAnim) {
+      console.log('Switching animation:', currentAnim, '->', targetAnim)
+      
       const prevAction = actions[currentAnim]
       const nextAction = actions[targetAnim]
       
       if (prevAction && nextAction) {
-        prevAction.fadeOut(0.3)
-        nextAction.reset().fadeIn(0.3).play()
+        prevAction.fadeOut(0.2)
+        nextAction.reset().fadeIn(0.2).play()
       } else if (nextAction) {
-        nextAction.reset().fadeIn(0.3).play()
+        nextAction.reset().fadeIn(0.2).play()
       }
       
       setCurrentAnim(targetAnim)
