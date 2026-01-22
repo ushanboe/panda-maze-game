@@ -5,7 +5,7 @@ import { AnimatedPanda } from './AnimatedPanda'
 import * as THREE from 'three'
 
 const PLAYER_SPEED = 4
-const ROTATION_SPEED = 3
+const TURN_ANGLE = Math.PI / 6 // 30 degrees
 const PLAYER_RADIUS = 0.4
 const CELL_SIZE = 2
 
@@ -14,7 +14,8 @@ export function Player({ mazeData, walls, onReachExit }) {
   const { camera } = useThree()
   const [isMoving, setIsMoving] = useState(false)
   const [hasWon, setHasWon] = useState(false)
-  const keysRef = useRef({ forward: false, backward: false, left: false, right: false })
+  const keysRef = useRef({ forward: false, backward: false })
+  const targetRotationRef = useRef(0)
   
   const gameState = useGameStore(state => state.gameState)
   const updatePlayerPosition = useGameStore(state => state.updatePlayerPosition)
@@ -40,7 +41,7 @@ export function Player({ mazeData, walls, onReachExit }) {
     return 0
   }
   
-  // Handle keyboard input - HOLD to move
+  // Handle keyboard input
   useEffect(() => {
     const handleKeyDown = (e) => {
       if (gameState !== 'playing') return
@@ -56,11 +57,17 @@ export function Player({ mazeData, walls, onReachExit }) {
           break
         case 'KeyA':
         case 'ArrowLeft':
-          keysRef.current.left = true
+          // Discrete 30-degree turn left
+          if (!e.repeat) {
+            targetRotationRef.current += TURN_ANGLE
+          }
           break
         case 'KeyD':
         case 'ArrowRight':
-          keysRef.current.right = true
+          // Discrete 30-degree turn right
+          if (!e.repeat) {
+            targetRotationRef.current -= TURN_ANGLE
+          }
           break
       }
     }
@@ -74,14 +81,6 @@ export function Player({ mazeData, walls, onReachExit }) {
         case 'KeyS':
         case 'ArrowDown':
           keysRef.current.backward = false
-          break
-        case 'KeyA':
-        case 'ArrowLeft':
-          keysRef.current.left = false
-          break
-        case 'KeyD':
-        case 'ArrowRight':
-          keysRef.current.right = false
           break
       }
     }
@@ -98,9 +97,11 @@ export function Player({ mazeData, walls, onReachExit }) {
   // Initialize position and rotation
   useEffect(() => {
     if (groupRef.current) {
+      const initialRotation = findOpenDirection()
       groupRef.current.position.set(startPos.x, 0, startPos.z)
-      groupRef.current.rotation.y = findOpenDirection()
-      updatePlayerPosition(startPos.x, startPos.z, groupRef.current.rotation.y)
+      groupRef.current.rotation.y = initialRotation
+      targetRotationRef.current = initialRotation
+      updatePlayerPosition(startPos.x, startPos.z, initialRotation)
     }
     setHasWon(false)
   }, [mazeData])
@@ -129,17 +130,19 @@ export function Player({ mazeData, walls, onReachExit }) {
       return
     }
     
-    const { forward, backward, left, right } = keysRef.current
+    const { forward, backward } = keysRef.current
     const currentPos = groupRef.current.position
-    const rotation = groupRef.current.rotation.y
     
-    // Handle rotation
-    if (left) {
-      groupRef.current.rotation.y += ROTATION_SPEED * delta
+    // Smooth rotation interpolation towards target
+    const currentRotation = groupRef.current.rotation.y
+    const rotationDiff = targetRotationRef.current - currentRotation
+    if (Math.abs(rotationDiff) > 0.01) {
+      groupRef.current.rotation.y += rotationDiff * 0.15 // Smooth lerp
+    } else {
+      groupRef.current.rotation.y = targetRotationRef.current
     }
-    if (right) {
-      groupRef.current.rotation.y -= ROTATION_SPEED * delta
-    }
+    
+    const rotation = groupRef.current.rotation.y
     
     // Handle movement
     let moveX = 0
@@ -150,7 +153,7 @@ export function Player({ mazeData, walls, onReachExit }) {
       moveZ = -Math.cos(rotation) * PLAYER_SPEED * delta
     }
     if (backward) {
-      moveX = Math.sin(rotation) * PLAYER_SPEED * delta * 0.5 // Slower backward
+      moveX = Math.sin(rotation) * PLAYER_SPEED * delta * 0.5
       moveZ = Math.cos(rotation) * PLAYER_SPEED * delta * 0.5
     }
     
@@ -178,7 +181,6 @@ export function Player({ mazeData, walls, onReachExit }) {
         else if (!checkCollision(currentPos.x, newZ)) {
           currentPos.z = newZ
         }
-        // Fully blocked - don't move
       }
       
       // Update store
