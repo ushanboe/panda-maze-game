@@ -1,7 +1,8 @@
-import { useRef, useEffect } from 'react'
+import { useRef, useEffect, useState } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
 import { useKeyboardControls } from './useKeyboardControls'
 import { useGameStore } from '../stores/gameStore'
+import { AnimatedPanda } from './AnimatedPanda'
 import * as THREE from 'three'
 
 const PLAYER_SPEED = 5
@@ -9,9 +10,11 @@ const PLAYER_RADIUS = 0.6
 const CELL_SIZE = 2
 
 export function Player({ mazeData, walls, onReachExit }) {
-  const meshRef = useRef()
+  const groupRef = useRef()
   const { camera } = useThree()
   const keys = useKeyboardControls()
+  const [isMoving, setIsMoving] = useState(false)
+  const [hasWon, setHasWon] = useState(false)
   
   const gameState = useGameStore(state => state.gameState)
   const updatePlayerPosition = useGameStore(state => state.updatePlayerPosition)
@@ -29,10 +32,11 @@ export function Player({ mazeData, walls, onReachExit }) {
   
   // Initialize position
   useEffect(() => {
-    if (meshRef.current) {
-      meshRef.current.position.set(startPos.x, 1.0, startPos.z)
+    if (groupRef.current) {
+      groupRef.current.position.set(startPos.x, 0, startPos.z)
       updatePlayerPosition(startPos.x, startPos.z, 0)
     }
+    setHasWon(false)
   }, [mazeData])
   
   // Check collision with walls
@@ -57,7 +61,10 @@ export function Player({ mazeData, walls, onReachExit }) {
   }
   
   useFrame((state, delta) => {
-    if (!meshRef.current || gameState !== 'playing') return
+    if (!groupRef.current || gameState !== 'playing') {
+      setIsMoving(false)
+      return
+    }
     
     const { forward, backward, left, right } = keys.current
     
@@ -77,8 +84,11 @@ export function Player({ mazeData, walls, onReachExit }) {
       moveZ /= len
     }
     
-    if (moveX !== 0 || moveZ !== 0) {
-      const currentPos = meshRef.current.position
+    const moving = moveX !== 0 || moveZ !== 0
+    setIsMoving(moving)
+    
+    if (moving) {
+      const currentPos = groupRef.current.position
       const speed = PLAYER_SPEED * delta
       
       // Calculate new position
@@ -95,23 +105,24 @@ export function Player({ mazeData, walls, onReachExit }) {
       
       // Update rotation to face movement direction
       const targetRotation = Math.atan2(moveX, moveZ)
-      meshRef.current.rotation.y = THREE.MathUtils.lerp(
-        meshRef.current.rotation.y,
+      groupRef.current.rotation.y = THREE.MathUtils.lerp(
+        groupRef.current.rotation.y,
         targetRotation,
         0.15
       )
       
       // Update store
-      updatePlayerPosition(currentPos.x, currentPos.z, meshRef.current.rotation.y)
+      updatePlayerPosition(currentPos.x, currentPos.z, groupRef.current.rotation.y)
       
       // Check win condition
-      if (checkExit(currentPos.x, currentPos.z)) {
+      if (checkExit(currentPos.x, currentPos.z) && !hasWon) {
+        setHasWon(true)
         onReachExit()
       }
     }
     
-    // Update camera to follow player (third person) - raised higher for bigger panda
-    const playerPos = meshRef.current.position
+    // Update camera to follow player (third person) - raised higher for better view
+    const playerPos = groupRef.current.position
     const cameraOffset = new THREE.Vector3(0, 10, 12)
     const targetCameraPos = new THREE.Vector3(
       playerPos.x + cameraOffset.x,
@@ -124,80 +135,8 @@ export function Player({ mazeData, walls, onReachExit }) {
   })
   
   return (
-    <group ref={meshRef} position={[startPos.x, 1.0, startPos.z]}>
-      {/* Panda body - BIGGER & FATTER */}
-      <mesh castShadow>
-        <capsuleGeometry args={[0.7, 1.2, 8, 16]} />
-        <meshStandardMaterial color="#ffffff" />
-      </mesh>
-      
-      {/* Panda belly (slightly darker/cream for depth) */}
-      <mesh position={[0, -0.1, 0.35]} castShadow>
-        <sphereGeometry args={[0.5, 16, 16]} />
-        <meshStandardMaterial color="#f5f5f0" />
-      </mesh>
-      
-      {/* Panda head - bigger */}
-      <mesh position={[0, 1.1, 0]} castShadow>
-        <sphereGeometry args={[0.55, 16, 16]} />
-        <meshStandardMaterial color="#ffffff" />
-      </mesh>
-      
-      {/* Ears (black) - repositioned for bigger head */}
-      <mesh position={[-0.4, 1.5, 0]} castShadow>
-        <sphereGeometry args={[0.18, 8, 8]} />
-        <meshStandardMaterial color="#1a1a1a" />
-      </mesh>
-      <mesh position={[0.4, 1.5, 0]} castShadow>
-        <sphereGeometry args={[0.18, 8, 8]} />
-        <meshStandardMaterial color="#1a1a1a" />
-      </mesh>
-      
-      {/* Eyes (black patches) - bigger */}
-      <mesh position={[-0.2, 1.15, 0.4]} castShadow>
-        <sphereGeometry args={[0.14, 8, 8]} />
-        <meshStandardMaterial color="#1a1a1a" />
-      </mesh>
-      <mesh position={[0.2, 1.15, 0.4]} castShadow>
-        <sphereGeometry args={[0.14, 8, 8]} />
-        <meshStandardMaterial color="#1a1a1a" />
-      </mesh>
-      
-      {/* Eye whites (small dots) */}
-      <mesh position={[-0.18, 1.18, 0.52]} castShadow>
-        <sphereGeometry args={[0.04, 8, 8]} />
-        <meshStandardMaterial color="#ffffff" />
-      </mesh>
-      <mesh position={[0.22, 1.18, 0.52]} castShadow>
-        <sphereGeometry args={[0.04, 8, 8]} />
-        <meshStandardMaterial color="#ffffff" />
-      </mesh>
-      
-      {/* Nose */}
-      <mesh position={[0, 1.0, 0.52]} castShadow>
-        <sphereGeometry args={[0.08, 8, 8]} />
-        <meshStandardMaterial color="#1a1a1a" />
-      </mesh>
-      
-      {/* Arms (black) */}
-      <mesh position={[-0.65, 0.2, 0]} rotation={[0, 0, 0.3]} castShadow>
-        <capsuleGeometry args={[0.18, 0.5, 8, 8]} />
-        <meshStandardMaterial color="#1a1a1a" />
-      </mesh>
-      <mesh position={[0.65, 0.2, 0]} rotation={[0, 0, -0.3]} castShadow>
-        <capsuleGeometry args={[0.18, 0.5, 8, 8]} />
-        <meshStandardMaterial color="#1a1a1a" />
-      </mesh>
-      
-      {/* Legs (black) */}
-      <mesh position={[-0.3, -0.8, 0]} castShadow>
-        <capsuleGeometry args={[0.2, 0.4, 8, 8]} />
-        <meshStandardMaterial color="#1a1a1a" />
-      </mesh>
-      <mesh position={[0.3, -0.8, 0]} castShadow>
-        <capsuleGeometry args={[0.2, 0.4, 8, 8]} />
-        <meshStandardMaterial color="#1a1a1a" />
-      </mesh>
+    <group ref={groupRef} position={[startPos.x, 0, startPos.z]}>
+      <AnimatedPanda isMoving={isMoving} hasWon={hasWon} scale={0.015} />
     </group>
   )
 }
