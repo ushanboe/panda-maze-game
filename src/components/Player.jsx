@@ -1,21 +1,20 @@
 import { useRef, useEffect, useState } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
-import { useKeyboardControls } from './useKeyboardControls'
 import { useGameStore } from '../stores/gameStore'
 import { AnimatedPanda } from './AnimatedPanda'
 import * as THREE from 'three'
 
 const PLAYER_SPEED = 5
-const ROTATION_SPEED = 3 // radians per second
+const ROTATION_SPEED = 3
 const PLAYER_RADIUS = 0.6
 const CELL_SIZE = 2
 
 export function Player({ mazeData, walls, onReachExit }) {
   const groupRef = useRef()
   const { camera } = useThree()
-  const keys = useKeyboardControls()
-  const [isMoving, setIsMoving] = useState(false)
+  const [isWalking, setIsWalking] = useState(false) // Toggle state for walking
   const [hasWon, setHasWon] = useState(false)
+  const keysRef = useRef({ left: false, right: false })
   
   const gameState = useGameStore(state => state.gameState)
   const updatePlayerPosition = useGameStore(state => state.updatePlayerPosition)
@@ -34,13 +33,63 @@ export function Player({ mazeData, walls, onReachExit }) {
   // Find initial rotation to face an open direction
   const findOpenDirection = () => {
     const startCell = mazeData.grid[mazeData.start.y][mazeData.start.x]
-    // Check which walls are open (false = no wall = open)
-    if (!startCell.top) return Math.PI // face up (negative Z)
-    if (!startCell.right) return -Math.PI / 2 // face right (positive X)
-    if (!startCell.bottom) return 0 // face down (positive Z)
-    if (!startCell.left) return Math.PI / 2 // face left (negative X)
+    if (!startCell.top) return Math.PI
+    if (!startCell.right) return -Math.PI / 2
+    if (!startCell.bottom) return 0
+    if (!startCell.left) return Math.PI / 2
     return 0
   }
+  
+  // Handle keyboard input
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (gameState !== 'playing') return
+      
+      switch(e.code) {
+        case 'KeyW':
+        case 'ArrowUp':
+          // Toggle walking on/off
+          setIsWalking(prev => !prev)
+          console.log('Walking toggled:', !isWalking)
+          break
+        case 'KeyA':
+        case 'ArrowLeft':
+          keysRef.current.left = true
+          break
+        case 'KeyD':
+        case 'ArrowRight':
+          keysRef.current.right = true
+          break
+        case 'KeyS':
+        case 'ArrowDown':
+          // Stop walking
+          setIsWalking(false)
+          console.log('Walking stopped')
+          break
+      }
+    }
+    
+    const handleKeyUp = (e) => {
+      switch(e.code) {
+        case 'KeyA':
+        case 'ArrowLeft':
+          keysRef.current.left = false
+          break
+        case 'KeyD':
+        case 'ArrowRight':
+          keysRef.current.right = false
+          break
+      }
+    }
+    
+    window.addEventListener('keydown', handleKeyDown)
+    window.addEventListener('keyup', handleKeyUp)
+    
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown)
+      window.removeEventListener('keyup', handleKeyUp)
+    }
+  }, [gameState])
   
   // Initialize position and rotation
   useEffect(() => {
@@ -50,6 +99,7 @@ export function Player({ mazeData, walls, onReachExit }) {
       updatePlayerPosition(startPos.x, startPos.z, groupRef.current.rotation.y)
     }
     setHasWon(false)
+    setIsWalking(false)
   }, [mazeData])
   
   // Check collision with walls
@@ -58,7 +108,6 @@ export function Player({ mazeData, walls, onReachExit }) {
       const dx = Math.abs(newX - wall.x)
       const dz = Math.abs(newZ - wall.z)
       
-      // Simple box collision
       if (dx < (CELL_SIZE / 2 + PLAYER_RADIUS) && dz < (CELL_SIZE / 2 + PLAYER_RADIUS)) {
         return true
       }
@@ -75,17 +124,12 @@ export function Player({ mazeData, walls, onReachExit }) {
   
   useFrame((state, delta) => {
     if (!groupRef.current || gameState !== 'playing') {
-      setIsMoving(false)
       return
     }
     
-    const { forward, backward, left, right } = keys.current
+    const { left, right } = keysRef.current
     
-    // CHARACTER-RELATIVE CONTROLS
-    // A/Left and D/Right = rotate
-    // W/Up and S/Down = move forward/backward in facing direction
-    
-    // Handle rotation
+    // Handle rotation (always works)
     if (left) {
       groupRef.current.rotation.y += ROTATION_SPEED * delta
     }
@@ -93,32 +137,38 @@ export function Player({ mazeData, walls, onReachExit }) {
       groupRef.current.rotation.y -= ROTATION_SPEED * delta
     }
     
-    // Handle movement (forward/backward relative to facing direction)
-    let moveSpeed = 0
-    if (forward) moveSpeed = PLAYER_SPEED
-    if (backward) moveSpeed = -PLAYER_SPEED * 0.5 // slower backward
-    
-    const moving = moveSpeed !== 0
-    setIsMoving(moving)
-    
-    if (moving) {
+    // Handle walking (toggle mode)
+    if (isWalking) {
       const currentPos = groupRef.current.position
       const rotation = groupRef.current.rotation.y
       
       // Calculate movement direction based on facing
-      const moveX = Math.sin(rotation) * moveSpeed * delta
-      const moveZ = Math.cos(rotation) * moveSpeed * delta
+      const moveX = Math.sin(rotation) * PLAYER_SPEED * delta
+      const moveZ = Math.cos(rotation) * PLAYER_SPEED * delta
       
       // Calculate new position
       let newX = currentPos.x - moveX
       let newZ = currentPos.z - moveZ
       
-      // Check collisions separately for X and Z for sliding along walls
+      // Check collisions - stop walking if we hit a wall
+      let hitWall = false
+      
       if (!checkCollision(newX, currentPos.z)) {
         currentPos.x = newX
+      } else {
+        hitWall = true
       }
+      
       if (!checkCollision(currentPos.x, newZ)) {
         currentPos.z = newZ
+      } else {
+        hitWall = true
+      }
+      
+      // Stop walking if we hit a wall
+      if (hitWall) {
+        setIsWalking(false)
+        console.log('Hit wall - stopped walking')
       }
       
       // Update store
@@ -127,15 +177,15 @@ export function Player({ mazeData, walls, onReachExit }) {
       // Check win condition
       if (checkExit(currentPos.x, currentPos.z) && !hasWon) {
         setHasWon(true)
+        setIsWalking(false)
         onReachExit()
       }
     }
     
-    // Update camera to follow player (third person) - behind the player
+    // Update camera to follow player
     const playerPos = groupRef.current.position
     const playerRot = groupRef.current.rotation.y
     
-    // Camera follows behind the player based on their rotation
     const cameraDistance = 12
     const cameraHeight = 10
     const cameraOffset = new THREE.Vector3(
@@ -156,7 +206,7 @@ export function Player({ mazeData, walls, onReachExit }) {
   
   return (
     <group ref={groupRef} position={[startPos.x, 0, startPos.z]}>
-      <AnimatedPanda isMoving={isMoving} hasWon={hasWon} scale={0.0075} />
+      <AnimatedPanda isMoving={isWalking} hasWon={hasWon} scale={0.0075} />
     </group>
   )
 }
