@@ -5,7 +5,7 @@ import { useGameStore } from '../stores/gameStore'
 import * as THREE from 'three'
 
 const PLAYER_SPEED = 5
-const PLAYER_RADIUS = 0.4
+const PLAYER_RADIUS = 0.6
 const CELL_SIZE = 2
 
 export function Player({ mazeData, walls, onReachExit }) {
@@ -30,7 +30,7 @@ export function Player({ mazeData, walls, onReachExit }) {
   // Initialize position
   useEffect(() => {
     if (meshRef.current) {
-      meshRef.current.position.set(startPos.x, 0.5, startPos.z)
+      meshRef.current.position.set(startPos.x, 1.0, startPos.z)
       updatePlayerPosition(startPos.x, startPos.z, 0)
     }
   }, [mazeData])
@@ -110,9 +110,9 @@ export function Player({ mazeData, walls, onReachExit }) {
       }
     }
     
-    // Update camera to follow player (third person)
+    // Update camera to follow player (third person) - raised higher for bigger panda
     const playerPos = meshRef.current.position
-    const cameraOffset = new THREE.Vector3(0, 8, 10)
+    const cameraOffset = new THREE.Vector3(0, 10, 12)
     const targetCameraPos = new THREE.Vector3(
       playerPos.x + cameraOffset.x,
       playerPos.y + cameraOffset.y,
@@ -120,46 +120,82 @@ export function Player({ mazeData, walls, onReachExit }) {
     )
     
     camera.position.lerp(targetCameraPos, 0.05)
-    camera.lookAt(playerPos.x, playerPos.y, playerPos.z)
+    camera.lookAt(playerPos.x, playerPos.y + 1, playerPos.z)
   })
   
   return (
-    <group ref={meshRef} position={[startPos.x, 0.5, startPos.z]}>
-      {/* Panda body (placeholder - white capsule) */}
+    <group ref={meshRef} position={[startPos.x, 1.0, startPos.z]}>
+      {/* Panda body - BIGGER & FATTER */}
       <mesh castShadow>
-        <capsuleGeometry args={[0.35, 0.5, 8, 16]} />
+        <capsuleGeometry args={[0.7, 1.2, 8, 16]} />
         <meshStandardMaterial color="#ffffff" />
       </mesh>
       
-      {/* Panda head */}
-      <mesh position={[0, 0.6, 0]} castShadow>
-        <sphereGeometry args={[0.3, 16, 16]} />
+      {/* Panda belly (slightly darker/cream for depth) */}
+      <mesh position={[0, -0.1, 0.35]} castShadow>
+        <sphereGeometry args={[0.5, 16, 16]} />
+        <meshStandardMaterial color="#f5f5f0" />
+      </mesh>
+      
+      {/* Panda head - bigger */}
+      <mesh position={[0, 1.1, 0]} castShadow>
+        <sphereGeometry args={[0.55, 16, 16]} />
         <meshStandardMaterial color="#ffffff" />
       </mesh>
       
-      {/* Ears (black) */}
-      <mesh position={[-0.2, 0.85, 0]} castShadow>
-        <sphereGeometry args={[0.1, 8, 8]} />
+      {/* Ears (black) - repositioned for bigger head */}
+      <mesh position={[-0.4, 1.5, 0]} castShadow>
+        <sphereGeometry args={[0.18, 8, 8]} />
         <meshStandardMaterial color="#1a1a1a" />
       </mesh>
-      <mesh position={[0.2, 0.85, 0]} castShadow>
-        <sphereGeometry args={[0.1, 8, 8]} />
+      <mesh position={[0.4, 1.5, 0]} castShadow>
+        <sphereGeometry args={[0.18, 8, 8]} />
         <meshStandardMaterial color="#1a1a1a" />
       </mesh>
       
-      {/* Eyes (black patches) */}
-      <mesh position={[-0.12, 0.65, 0.22]} castShadow>
-        <sphereGeometry args={[0.08, 8, 8]} />
+      {/* Eyes (black patches) - bigger */}
+      <mesh position={[-0.2, 1.15, 0.4]} castShadow>
+        <sphereGeometry args={[0.14, 8, 8]} />
         <meshStandardMaterial color="#1a1a1a" />
       </mesh>
-      <mesh position={[0.12, 0.65, 0.22]} castShadow>
-        <sphereGeometry args={[0.08, 8, 8]} />
+      <mesh position={[0.2, 1.15, 0.4]} castShadow>
+        <sphereGeometry args={[0.14, 8, 8]} />
         <meshStandardMaterial color="#1a1a1a" />
+      </mesh>
+      
+      {/* Eye whites (small dots) */}
+      <mesh position={[-0.18, 1.18, 0.52]} castShadow>
+        <sphereGeometry args={[0.04, 8, 8]} />
+        <meshStandardMaterial color="#ffffff" />
+      </mesh>
+      <mesh position={[0.22, 1.18, 0.52]} castShadow>
+        <sphereGeometry args={[0.04, 8, 8]} />
+        <meshStandardMaterial color="#ffffff" />
       </mesh>
       
       {/* Nose */}
-      <mesh position={[0, 0.55, 0.28]} castShadow>
-        <sphereGeometry args={[0.05, 8, 8]} />
+      <mesh position={[0, 1.0, 0.52]} castShadow>
+        <sphereGeometry args={[0.08, 8, 8]} />
+        <meshStandardMaterial color="#1a1a1a" />
+      </mesh>
+      
+      {/* Arms (black) */}
+      <mesh position={[-0.65, 0.2, 0]} rotation={[0, 0, 0.3]} castShadow>
+        <capsuleGeometry args={[0.18, 0.5, 8, 8]} />
+        <meshStandardMaterial color="#1a1a1a" />
+      </mesh>
+      <mesh position={[0.65, 0.2, 0]} rotation={[0, 0, -0.3]} castShadow>
+        <capsuleGeometry args={[0.18, 0.5, 8, 8]} />
+        <meshStandardMaterial color="#1a1a1a" />
+      </mesh>
+      
+      {/* Legs (black) */}
+      <mesh position={[-0.3, -0.8, 0]} castShadow>
+        <capsuleGeometry args={[0.2, 0.4, 8, 8]} />
+        <meshStandardMaterial color="#1a1a1a" />
+      </mesh>
+      <mesh position={[0.3, -0.8, 0]} castShadow>
+        <capsuleGeometry args={[0.2, 0.4, 8, 8]} />
         <meshStandardMaterial color="#1a1a1a" />
       </mesh>
     </group>
