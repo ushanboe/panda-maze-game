@@ -247,7 +247,7 @@ export function Player({ mazeData, walls, onReachExit }) {
   
   return (
     <group ref={groupRef} position={[startPos.x, 0, startPos.z]}>
-      <AnimatedPanda isMoving={isWalking} hasWon={hasWon} scale={0.0075} />
+      <AnimatedPanda isMoving={isWalking} hasWon={hasWon} scale={0.02} />
     </group>
   )
 }
