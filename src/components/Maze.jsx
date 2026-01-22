@@ -1,111 +1,152 @@
-import { useMemo, useEffect, useState } from 'react'
-import { FBXLoader } from 'three/examples/jsm/loaders/FBXLoader'
+import { useMemo } from 'react'
 import * as THREE from 'three'
 
 const CELL_SIZE = 2
 const WALL_HEIGHT = 3
 
-export function Maze({ walls, exitPosition }) {
-  const [bambooTemplate, setBambooTemplate] = useState(null)
-  const [modelInfo, setModelInfo] = useState(null)
-  
-  useEffect(() => {
-    const loader = new FBXLoader()
-    loader.load('/models/bamboo.fbx', (fbx) => {
-      // Calculate bounding box to understand model size
-      const box = new THREE.Box3().setFromObject(fbx)
-      const size = box.getSize(new THREE.Vector3())
-      const center = box.getCenter(new THREE.Vector3())
-      
-      console.log('=== BAMBOO MODEL INFO ===')
-      console.log('Size:', size)
-      console.log('Center:', center)
-      console.log('Min:', box.min)
-      console.log('Max:', box.max)
-      
-      setModelInfo({ size, center, box })
-      
-      // Apply materials and shadows
-      fbx.traverse((child) => {
-        if (child.isMesh) {
-          child.castShadow = true
-          child.receiveShadow = true
-          child.material = new THREE.MeshStandardMaterial({
-            color: '#4a7c32',
-            roughness: 0.7,
-            metalness: 0.1
-          })
-        }
+// Low-poly leaf component
+function BambooLeaf({ position, rotation, scale = 1 }) {
+  return (
+    <group position={position} rotation={rotation}>
+      {/* Simple elongated diamond/leaf shape */}
+      <mesh castShadow>
+        <coneGeometry args={[0.15 * scale, 0.6 * scale, 4, 1]} />
+        <meshStandardMaterial 
+          color="#228b22" 
+          side={THREE.DoubleSide}
+          flatShading={true}
+        />
+      </mesh>
+    </group>
+  )
+}
+
+// Leaf cluster - multiple leaves sprouting from a point
+function LeafCluster({ position, count = 3 }) {
+  const leaves = useMemo(() => {
+    const result = []
+    for (let i = 0; i < count; i++) {
+      const angle = (i / count) * Math.PI * 2 + Math.random() * 0.5
+      const tilt = Math.PI / 4 + Math.random() * 0.3
+      const leafScale = 0.8 + Math.random() * 0.4
+      result.push({
+        rotation: [tilt, angle, 0],
+        scale: leafScale
       })
-      
-      setBambooTemplate(fbx)
-      console.log('Bamboo model loaded successfully!')
-    }, 
-    (progress) => {
-      console.log('Loading bamboo:', (progress.loaded / progress.total * 100) + '%')
-    },
-    (error) => {
-      console.error('Error loading bamboo:', error)
-    })
-  }, [])
-  
-  // Calculate appropriate scale based on model size
-  const bambooScale = useMemo(() => {
-    if (!modelInfo) return 0.01
-    // We want bamboo to be about WALL_HEIGHT tall (3 units)
-    const targetHeight = WALL_HEIGHT
-    const currentHeight = modelInfo.size.y
-    const scale = targetHeight / currentHeight
-    console.log('Calculated scale:', scale, 'from height:', currentHeight)
-    return scale
-  }, [modelInfo])
-  
-  // Generate bamboo positions for all walls
-  const bambooInstances = useMemo(() => {
-    if (!walls) return []
-    
-    const instances = []
-    walls.forEach((wall) => {
-      // Place 2-3 bamboo stalks per wall cell
-      const count = 2 + Math.floor(Math.random() * 2)
-      for (let i = 0; i < count; i++) {
-        const offsetX = (Math.random() - 0.5) * CELL_SIZE * 0.6
-        const offsetZ = (Math.random() - 0.5) * CELL_SIZE * 0.6
-        instances.push({
-          position: [wall.x + offsetX, 0, wall.z + offsetZ],
-          rotation: Math.random() * Math.PI * 2,
-          scaleVar: 0.8 + Math.random() * 0.4 // 80% to 120% of base scale
-        })
-      }
-    })
-    console.log('Created', instances.length, 'bamboo instances')
-    return instances
-  }, [walls])
+    }
+    return result
+  }, [count])
   
   return (
-    <group>
-      {/* Debug: Show wall positions with simple boxes if bamboo not loaded */}
-      {!bambooTemplate && walls.map((wall, index) => (
-        <mesh key={`debug-${index}`} position={[wall.x, WALL_HEIGHT/2, wall.z]}>
-          <boxGeometry args={[CELL_SIZE * 0.9, WALL_HEIGHT, CELL_SIZE * 0.9]} />
-          <meshStandardMaterial color="#2d5a1d" />
+    <group position={position}>
+      {leaves.map((leaf, i) => (
+        <BambooLeaf 
+          key={i} 
+          position={[0, 0, 0]} 
+          rotation={leaf.rotation}
+          scale={leaf.scale}
+        />
+      ))}
+    </group>
+  )
+}
+
+// Bamboo segment component with leaves
+function BambooSegment({ position, height = WALL_HEIGHT }) {
+  // Generate random leaf positions along the stalk
+  const leafPositions = useMemo(() => {
+    const positions = []
+    const leafCount = 2 + Math.floor(Math.random() * 2) // 2-3 leaf clusters
+    for (let i = 0; i < leafCount; i++) {
+      const y = (0.4 + Math.random() * 0.5) * height - height/2 // Upper portion
+      positions.push(y)
+    }
+    return positions
+  }, [height])
+  
+  return (
+    <group position={position}>
+      {/* Main bamboo stalk */}
+      <mesh castShadow receiveShadow>
+        <cylinderGeometry args={[0.12, 0.15, height, 8]} />
+        <meshStandardMaterial color="#7cb342" flatShading={true} />
+      </mesh>
+      
+      {/* Bamboo rings/nodes */}
+      {[0.25, 0.5, 0.75].map((t, i) => (
+        <mesh key={i} position={[0, (t - 0.5) * height, 0]} castShadow>
+          <torusGeometry args={[0.14, 0.025, 6, 12]} />
+          <meshStandardMaterial color="#558b2f" flatShading={true} />
         </mesh>
       ))}
       
-      {/* Render bamboo instances */}
-      {bambooTemplate && bambooInstances.map((instance, index) => {
-        const clone = bambooTemplate.clone()
-        const finalScale = bambooScale * instance.scaleVar
-        clone.scale.setScalar(finalScale)
-        clone.rotation.y = instance.rotation
-        return (
-          <primitive
-            key={index}
-            object={clone}
-            position={instance.position}
-          />
-        )
-      })}
+      {/* Leaf clusters */}
+      {leafPositions.map((y, i) => (
+        <LeafCluster 
+          key={i} 
+          position={[0, y, 0]} 
+          count={2 + Math.floor(Math.random() * 2)}
+        />
+      ))}
+      
+      {/* Top leaves */}
+      <LeafCluster 
+        position={[0, height/2 - 0.1, 0]} 
+        count={4}
+      />
+    </group>
+  )
+}
+
+// Wall made of multiple bamboo stalks
+function BambooWall({ x, z }) {
+  const bambooStalks = useMemo(() => {
+    const stalks = []
+    const count = 3 // 3x3 grid of bamboo
+    const spacing = CELL_SIZE / count
+    
+    for (let i = 0; i < count; i++) {
+      for (let j = 0; j < count; j++) {
+        const offsetX = (i - count / 2 + 0.5) * spacing
+        const offsetZ = (j - count / 2 + 0.5) * spacing
+        // Add slight random variation
+        const randX = (Math.random() - 0.5) * 0.15
+        const randZ = (Math.random() - 0.5) * 0.15
+        const randHeight = WALL_HEIGHT + (Math.random() - 0.5) * 0.8
+        
+        stalks.push({
+          position: [offsetX + randX, 0, offsetZ + randZ],
+          height: randHeight
+        })
+      }
+    }
+    return stalks
+  }, [])
+  
+  return (
+    <group position={[x, WALL_HEIGHT / 2, z]}>
+      {bambooStalks.map((stalk, index) => (
+        <BambooSegment
+          key={index}
+          position={stalk.position}
+          height={stalk.height}
+        />
+      ))}
+    </group>
+  )
+}
+
+export function Maze({ walls, exitPosition }) {
+  return (
+    <group>
+      {/* Render all walls */}
+      {walls.map((wall, index) => (
+        <BambooWall
+          key={index}
+          x={wall.x}
+          z={wall.z}
+        />
+      ))}
       
       {/* Exit marker - glowing green portal */}
       <group position={[exitPosition.x, 0, exitPosition.z]}>
