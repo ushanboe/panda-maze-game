@@ -60,7 +60,7 @@ export function AnimatedPanda({ isMoving, hasWon, scale = 0.0075 }) {
       }
       
       // Load walk animation
-      loader.load('/models/panda/Start_Walking.fbx', (walkFbx) => {
+      loader.load('/models/panda/Mutant_Walking.fbx', (walkFbx) => {
         if (!mounted) return
         
         if (walkFbx.animations.length > 0 && mixerRef.current) {
