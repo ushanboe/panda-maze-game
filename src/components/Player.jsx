@@ -6,6 +6,7 @@ import { AnimatedPanda } from './AnimatedPanda'
 import * as THREE from 'three'
 
 const PLAYER_SPEED = 5
+const ROTATION_SPEED = 3 // radians per second
 const PLAYER_RADIUS = 0.6
 const CELL_SIZE = 2
 
@@ -30,11 +31,23 @@ export function Player({ mazeData, walls, onReachExit }) {
     z: (mazeData.exit.y - mazeData.height / 2) * CELL_SIZE + CELL_SIZE / 2
   }
   
-  // Initialize position
+  // Find initial rotation to face an open direction
+  const findOpenDirection = () => {
+    const startCell = mazeData.grid[mazeData.start.y][mazeData.start.x]
+    // Check which walls are open (false = no wall = open)
+    if (!startCell.top) return Math.PI // face up (negative Z)
+    if (!startCell.right) return -Math.PI / 2 // face right (positive X)
+    if (!startCell.bottom) return 0 // face down (positive Z)
+    if (!startCell.left) return Math.PI / 2 // face left (negative X)
+    return 0
+  }
+  
+  // Initialize position and rotation
   useEffect(() => {
     if (groupRef.current) {
       groupRef.current.position.set(startPos.x, 0, startPos.z)
-      updatePlayerPosition(startPos.x, startPos.z, 0)
+      groupRef.current.rotation.y = findOpenDirection()
+      updatePlayerPosition(startPos.x, startPos.z, groupRef.current.rotation.y)
     }
     setHasWon(false)
   }, [mazeData])
@@ -68,32 +81,37 @@ export function Player({ mazeData, walls, onReachExit }) {
     
     const { forward, backward, left, right } = keys.current
     
-    // Calculate movement direction
-    let moveX = 0
-    let moveZ = 0
+    // CHARACTER-RELATIVE CONTROLS
+    // A/Left and D/Right = rotate
+    // W/Up and S/Down = move forward/backward in facing direction
     
-    if (forward) moveZ -= 1
-    if (backward) moveZ += 1
-    if (left) moveX -= 1
-    if (right) moveX += 1
-    
-    // Normalize diagonal movement
-    if (moveX !== 0 && moveZ !== 0) {
-      const len = Math.sqrt(moveX * moveX + moveZ * moveZ)
-      moveX /= len
-      moveZ /= len
+    // Handle rotation
+    if (left) {
+      groupRef.current.rotation.y += ROTATION_SPEED * delta
+    }
+    if (right) {
+      groupRef.current.rotation.y -= ROTATION_SPEED * delta
     }
     
-    const moving = moveX !== 0 || moveZ !== 0
+    // Handle movement (forward/backward relative to facing direction)
+    let moveSpeed = 0
+    if (forward) moveSpeed = PLAYER_SPEED
+    if (backward) moveSpeed = -PLAYER_SPEED * 0.5 // slower backward
+    
+    const moving = moveSpeed !== 0
     setIsMoving(moving)
     
     if (moving) {
       const currentPos = groupRef.current.position
-      const speed = PLAYER_SPEED * delta
+      const rotation = groupRef.current.rotation.y
+      
+      // Calculate movement direction based on facing
+      const moveX = Math.sin(rotation) * moveSpeed * delta
+      const moveZ = Math.cos(rotation) * moveSpeed * delta
       
       // Calculate new position
-      let newX = currentPos.x + moveX * speed
-      let newZ = currentPos.z + moveZ * speed
+      let newX = currentPos.x - moveX
+      let newZ = currentPos.z - moveZ
       
       // Check collisions separately for X and Z for sliding along walls
       if (!checkCollision(newX, currentPos.z)) {
@@ -102,14 +120,6 @@ export function Player({ mazeData, walls, onReachExit }) {
       if (!checkCollision(currentPos.x, newZ)) {
         currentPos.z = newZ
       }
-      
-      // Update rotation to face movement direction
-      const targetRotation = Math.atan2(moveX, moveZ)
-      groupRef.current.rotation.y = THREE.MathUtils.lerp(
-        groupRef.current.rotation.y,
-        targetRotation,
-        0.15
-      )
       
       // Update store
       updatePlayerPosition(currentPos.x, currentPos.z, groupRef.current.rotation.y)
@@ -121,9 +131,19 @@ export function Player({ mazeData, walls, onReachExit }) {
       }
     }
     
-    // Update camera to follow player (third person) - raised higher for better view
+    // Update camera to follow player (third person) - behind the player
     const playerPos = groupRef.current.position
-    const cameraOffset = new THREE.Vector3(0, 10, 12)
+    const playerRot = groupRef.current.rotation.y
+    
+    // Camera follows behind the player based on their rotation
+    const cameraDistance = 12
+    const cameraHeight = 10
+    const cameraOffset = new THREE.Vector3(
+      Math.sin(playerRot) * cameraDistance,
+      cameraHeight,
+      Math.cos(playerRot) * cameraDistance
+    )
+    
     const targetCameraPos = new THREE.Vector3(
       playerPos.x + cameraOffset.x,
       playerPos.y + cameraOffset.y,
