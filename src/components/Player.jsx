@@ -5,7 +5,6 @@ import { AnimatedPanda } from './AnimatedPanda'
 import * as THREE from 'three'
 
 const PLAYER_SPEED = 4
-const TURN_ANGLE = Math.PI / 6 // 30 degrees
 const PLAYER_RADIUS = 0.4
 const CELL_SIZE = 2
 
@@ -14,8 +13,7 @@ export function Player({ mazeData, walls, onReachExit }) {
   const { camera } = useThree()
   const [isMoving, setIsMoving] = useState(false)
   const [hasWon, setHasWon] = useState(false)
-  const keysRef = useRef({ forward: false, backward: false })
-  const targetRotationRef = useRef(0)
+  const keysRef = useRef({ up: false, down: false, left: false, right: false })
   
   const gameState = useGameStore(state => state.gameState)
   const updatePlayerPosition = useGameStore(state => state.updatePlayerPosition)
@@ -31,17 +29,7 @@ export function Player({ mazeData, walls, onReachExit }) {
     z: (mazeData.exit.y - mazeData.height / 2) * CELL_SIZE + CELL_SIZE / 2
   }
   
-  // Find initial rotation to face an open direction
-  const findOpenDirection = () => {
-    const startCell = mazeData.grid[mazeData.start.y][mazeData.start.x]
-    if (!startCell.top) return Math.PI
-    if (!startCell.right) return -Math.PI / 2
-    if (!startCell.bottom) return 0
-    if (!startCell.left) return Math.PI / 2
-    return 0
-  }
-  
-  // Handle keyboard input
+  // Handle keyboard input - WORLD RELATIVE
   useEffect(() => {
     const handleKeyDown = (e) => {
       if (gameState !== 'playing') return
@@ -49,25 +37,19 @@ export function Player({ mazeData, walls, onReachExit }) {
       switch(e.code) {
         case 'KeyW':
         case 'ArrowUp':
-          keysRef.current.forward = true
+          keysRef.current.up = true
           break
         case 'KeyS':
         case 'ArrowDown':
-          keysRef.current.backward = true
+          keysRef.current.down = true
           break
         case 'KeyA':
         case 'ArrowLeft':
-          // Discrete 30-degree turn left
-          if (!e.repeat) {
-            targetRotationRef.current += TURN_ANGLE
-          }
+          keysRef.current.left = true
           break
         case 'KeyD':
         case 'ArrowRight':
-          // Discrete 30-degree turn right
-          if (!e.repeat) {
-            targetRotationRef.current -= TURN_ANGLE
-          }
+          keysRef.current.right = true
           break
       }
     }
@@ -76,11 +58,19 @@ export function Player({ mazeData, walls, onReachExit }) {
       switch(e.code) {
         case 'KeyW':
         case 'ArrowUp':
-          keysRef.current.forward = false
+          keysRef.current.up = false
           break
         case 'KeyS':
         case 'ArrowDown':
-          keysRef.current.backward = false
+          keysRef.current.down = false
+          break
+        case 'KeyA':
+        case 'ArrowLeft':
+          keysRef.current.left = false
+          break
+        case 'KeyD':
+        case 'ArrowRight':
+          keysRef.current.right = false
           break
       }
     }
@@ -94,14 +84,12 @@ export function Player({ mazeData, walls, onReachExit }) {
     }
   }, [gameState])
   
-  // Initialize position and rotation
+  // Initialize position
   useEffect(() => {
     if (groupRef.current) {
-      const initialRotation = findOpenDirection()
       groupRef.current.position.set(startPos.x, 0, startPos.z)
-      groupRef.current.rotation.y = initialRotation
-      targetRotationRef.current = initialRotation
-      updatePlayerPosition(startPos.x, startPos.z, initialRotation)
+      groupRef.current.rotation.y = 0
+      updatePlayerPosition(startPos.x, startPos.z, 0)
     }
     setHasWon(false)
   }, [mazeData])
@@ -130,37 +118,36 @@ export function Player({ mazeData, walls, onReachExit }) {
       return
     }
     
-    const { forward, backward } = keysRef.current
+    const { up, down, left, right } = keysRef.current
     const currentPos = groupRef.current.position
     
-    // Smooth rotation interpolation towards target
-    const currentRotation = groupRef.current.rotation.y
-    const rotationDiff = targetRotationRef.current - currentRotation
-    if (Math.abs(rotationDiff) > 0.01) {
-      groupRef.current.rotation.y += rotationDiff * 0.15 // Smooth lerp
-    } else {
-      groupRef.current.rotation.y = targetRotationRef.current
-    }
-    
-    const rotation = groupRef.current.rotation.y
-    
-    // Handle movement
+    // Calculate world-relative movement
     let moveX = 0
     let moveZ = 0
     
-    if (forward) {
-      moveX = -Math.sin(rotation) * PLAYER_SPEED * delta
-      moveZ = -Math.cos(rotation) * PLAYER_SPEED * delta
-    }
-    if (backward) {
-      moveX = Math.sin(rotation) * PLAYER_SPEED * delta * 0.5
-      moveZ = Math.cos(rotation) * PLAYER_SPEED * delta * 0.5
-    }
+    if (up) moveZ -= PLAYER_SPEED * delta    // W = move forward (negative Z)
+    if (down) moveZ += PLAYER_SPEED * delta  // S = move backward (positive Z)
+    if (left) moveX -= PLAYER_SPEED * delta  // A = move left (negative X)
+    if (right) moveX += PLAYER_SPEED * delta // D = move right (positive X)
     
     // Update moving state for animation
-    const nowMoving = forward || backward
+    const nowMoving = up || down || left || right
     if (nowMoving !== isMoving) {
       setIsMoving(nowMoving)
+    }
+    
+    // Auto-rotate panda to face movement direction
+    if (moveX !== 0 || moveZ !== 0) {
+      const targetAngle = Math.atan2(moveX, moveZ)
+      // Smooth rotation
+      let currentAngle = groupRef.current.rotation.y
+      let angleDiff = targetAngle - currentAngle
+      
+      // Normalize angle difference to -PI to PI
+      while (angleDiff > Math.PI) angleDiff -= Math.PI * 2
+      while (angleDiff < -Math.PI) angleDiff += Math.PI * 2
+      
+      groupRef.current.rotation.y += angleDiff * 0.2
     }
     
     // Apply movement with collision detection
@@ -173,14 +160,15 @@ export function Player({ mazeData, walls, onReachExit }) {
         currentPos.x = newX
         currentPos.z = newZ
       } else {
-        // Try sliding along X axis
+        // Try sliding along X axis only
         if (!checkCollision(newX, currentPos.z)) {
           currentPos.x = newX
         }
-        // Try sliding along Z axis
+        // Try sliding along Z axis only
         else if (!checkCollision(currentPos.x, newZ)) {
           currentPos.z = newZ
         }
+        // Fully blocked - don't move
       }
       
       // Update store
@@ -193,26 +181,19 @@ export function Player({ mazeData, walls, onReachExit }) {
       }
     }
     
-    // Update camera to follow player
+    // Fixed camera position - top-down angled view
     const playerPos = groupRef.current.position
-    const playerRot = groupRef.current.rotation.y
-    
-    const cameraDistance = 10
-    const cameraHeight = 8
-    const cameraOffset = new THREE.Vector3(
-      Math.sin(playerRot) * cameraDistance,
-      cameraHeight,
-      Math.cos(playerRot) * cameraDistance
-    )
+    const cameraDistance = 12
+    const cameraHeight = 10
     
     const targetCameraPos = new THREE.Vector3(
-      playerPos.x + cameraOffset.x,
-      playerPos.y + cameraOffset.y,
-      playerPos.z + cameraOffset.z
+      playerPos.x,
+      playerPos.y + cameraHeight,
+      playerPos.z + cameraDistance
     )
     
     camera.position.lerp(targetCameraPos, 0.05)
-    camera.lookAt(playerPos.x, playerPos.y + 1, playerPos.z)
+    camera.lookAt(playerPos.x, playerPos.y, playerPos.z)
   })
   
   return (
