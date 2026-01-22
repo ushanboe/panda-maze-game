@@ -41,13 +41,17 @@ export function AnimatedPanda({ isMoving, hasWon, scale = 0.0075 }) {
       mixerRef.current = new THREE.AnimationMixer(fbx)
       modelRef.current = fbx
       
-      // Store idle animation (fix track names)
+      // Log original track names
       if (fbx.animations.length > 0) {
+        console.log('Original Idle track names:', fbx.animations[0].tracks.slice(0, 3).map(t => t.name))
+        
         const fixedClip = fixAnimationTrackNames(fbx.animations[0])
+        console.log('Fixed Idle track names:', fixedClip.tracks.slice(0, 3).map(t => t.name))
+        
         const action = mixerRef.current.clipAction(fixedClip)
         actionsRef.current.idle = action
         action.play()
-        console.log('Idle animation loaded and playing')
+        console.log('Idle animation playing, duration:', fixedClip.duration)
       }
       
       // Add model to group
@@ -60,10 +64,14 @@ export function AnimatedPanda({ isMoving, hasWon, scale = 0.0075 }) {
         if (!mounted) return
         
         if (walkFbx.animations.length > 0 && mixerRef.current) {
+          console.log('Original Walk track names:', walkFbx.animations[0].tracks.slice(0, 3).map(t => t.name))
+          
           const fixedClip = fixAnimationTrackNames(walkFbx.animations[0])
+          console.log('Fixed Walk track names:', fixedClip.tracks.slice(0, 3).map(t => t.name))
+          
           const action = mixerRef.current.clipAction(fixedClip)
           actionsRef.current.walk = action
-          console.log('Walk animation loaded')
+          console.log('Walk animation loaded, duration:', fixedClip.duration)
         }
         
         // Load dance animation
@@ -74,7 +82,7 @@ export function AnimatedPanda({ isMoving, hasWon, scale = 0.0075 }) {
             const fixedClip = fixAnimationTrackNames(danceFbx.animations[0])
             const action = mixerRef.current.clipAction(fixedClip)
             actionsRef.current.dance = action
-            console.log('Dance animation loaded')
+            console.log('Dance animation loaded, duration:', fixedClip.duration)
           }
           setLoaded(true)
           console.log('All animations loaded!')
@@ -108,15 +116,21 @@ export function AnimatedPanda({ isMoving, hasWon, scale = 0.0075 }) {
     
     if (targetAnim !== currentAnim) {
       console.log('Switching animation:', currentAnim, '->', targetAnim)
+      console.log('Actions available:', Object.keys(actions))
       
       const prevAction = actions[currentAnim]
       const nextAction = actions[targetAnim]
       
+      console.log('prevAction:', prevAction ? 'exists' : 'null')
+      console.log('nextAction:', nextAction ? 'exists' : 'null')
+      
       if (prevAction && nextAction) {
         prevAction.fadeOut(0.2)
         nextAction.reset().fadeIn(0.2).play()
+        console.log('Animation transition executed')
       } else if (nextAction) {
         nextAction.reset().fadeIn(0.2).play()
+        console.log('New animation started (no prev)')
       }
       
       setCurrentAnim(targetAnim)
