@@ -1,62 +1,75 @@
-import { useRef, useEffect, useState, useMemo } from 'react'
-import { useFrame, useGraph } from '@react-three/fiber'
-import { useFBX, useAnimations } from '@react-three/drei'
-import { SkeletonUtils } from 'three-stdlib'
+import { useRef, useEffect, useState } from 'react'
+import { useFrame } from '@react-three/fiber'
+import { FBXLoader } from 'three/examples/jsm/loaders/FBXLoader'
 import * as THREE from 'three'
 
 export function AnimatedPanda({ isMoving, hasWon, scale = 0.0075 }) {
   const groupRef = useRef()
+  const mixerRef = useRef(null)
+  const actionsRef = useRef({})
+  const modelRef = useRef(null)
+  const [loaded, setLoaded] = useState(false)
   const [currentAnim, setCurrentAnim] = useState('idle')
   
-  // Load all FBX models
-  const idleFbx = useFBX('/models/panda/Idle.fbx')
-  const walkFbx = useFBX('/models/panda/Start_Walking.fbx')
-  const danceFbx = useFBX('/models/panda/Hip_Hop_Dancing.fbx')
-  
-  // Clone the model so we can reuse it
-  const clonedScene = useMemo(() => {
-    if (idleFbx) {
-      return SkeletonUtils.clone(idleFbx)
-    }
-    return null
-  }, [idleFbx])
-  
-  // Combine all animations into one array
-  const animations = useMemo(() => {
-    const anims = []
-    
-    if (idleFbx?.animations?.[0]) {
-      const clip = idleFbx.animations[0].clone()
-      clip.name = 'idle'
-      anims.push(clip)
-    }
-    if (walkFbx?.animations?.[0]) {
-      const clip = walkFbx.animations[0].clone()
-      clip.name = 'walk'
-      anims.push(clip)
-    }
-    if (danceFbx?.animations?.[0]) {
-      const clip = danceFbx.animations[0].clone()
-      clip.name = 'dance'
-      anims.push(clip)
-    }
-    
-    return anims
-  }, [idleFbx, walkFbx, danceFbx])
-  
-  // Use the animations hook from drei
-  const { actions, mixer } = useAnimations(animations, clonedScene)
-  
-  // Start idle animation on mount
+  // Load model and animations
   useEffect(() => {
-    if (actions?.idle) {
-      actions.idle.reset().fadeIn(0.2).play()
+    const loader = new FBXLoader()
+    
+    // Load the base model (Idle) first
+    loader.load('/models/panda/Idle.fbx', (fbx) => {
+      // Scale and setup the model
+      fbx.scale.setScalar(scale)
+      fbx.rotation.y = Math.PI
+      
+      // Create animation mixer
+      mixerRef.current = new THREE.AnimationMixer(fbx)
+      modelRef.current = fbx
+      
+      // Store idle animation
+      if (fbx.animations.length > 0) {
+        const action = mixerRef.current.clipAction(fbx.animations[0])
+        actionsRef.current.idle = action
+        action.play()
+      }
+      
+      // Add model to group
+      if (groupRef.current) {
+        groupRef.current.add(fbx)
+      }
+      
+      // Load walk animation
+      loader.load('/models/panda/Start_Walking.fbx', (walkFbx) => {
+        if (walkFbx.animations.length > 0 && mixerRef.current) {
+          const action = mixerRef.current.clipAction(walkFbx.animations[0])
+          actionsRef.current.walk = action
+        }
+        
+        // Load dance animation
+        loader.load('/models/panda/Hip_Hop_Dancing.fbx', (danceFbx) => {
+          if (danceFbx.animations.length > 0 && mixerRef.current) {
+            const action = mixerRef.current.clipAction(danceFbx.animations[0])
+            actionsRef.current.dance = action
+          }
+          setLoaded(true)
+        })
+      })
+    })
+    
+    return () => {
+      if (mixerRef.current) {
+        mixerRef.current.stopAllAction()
+      }
+      if (groupRef.current && modelRef.current) {
+        groupRef.current.remove(modelRef.current)
+      }
     }
-  }, [actions])
+  }, [scale])
   
-  // Handle animation transitions based on state
+  // Handle animation transitions
   useEffect(() => {
-    if (!actions) return
+    if (!loaded || !mixerRef.current) return
+    
+    const actions = actionsRef.current
     
     let targetAnim = 'idle'
     if (hasWon && actions.dance) {
@@ -66,27 +79,26 @@ export function AnimatedPanda({ isMoving, hasWon, scale = 0.0075 }) {
     }
     
     if (targetAnim !== currentAnim) {
-      // Fade out current
-      const currentAction = actions[currentAnim]
-      const targetAction = actions[targetAnim]
+      const prevAction = actions[currentAnim]
+      const nextAction = actions[targetAnim]
       
-      if (currentAction) {
-        currentAction.fadeOut(0.2)
-      }
-      
-      if (targetAction) {
-        targetAction.reset().fadeIn(0.2).play()
+      if (prevAction && nextAction) {
+        prevAction.fadeOut(0.3)
+        nextAction.reset().fadeIn(0.3).play()
+      } else if (nextAction) {
+        nextAction.reset().fadeIn(0.3).play()
       }
       
       setCurrentAnim(targetAnim)
     }
-  }, [isMoving, hasWon, actions, currentAnim])
+  }, [isMoving, hasWon, loaded, currentAnim])
   
-  if (!clonedScene) return null
+  // Update animation mixer every frame
+  useFrame((state, delta) => {
+    if (mixerRef.current) {
+      mixerRef.current.update(delta)
+    }
+  })
   
-  return (
-    <group ref={groupRef} scale={[scale, scale, scale]} rotation={[0, Math.PI, 0]}>
-      <primitive object={clonedScene} />
-    </group>
-  )
+  return <group ref={groupRef} />
 }
