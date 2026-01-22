@@ -30,7 +30,7 @@ export function AnimatedPanda({ isMoving, hasWon, scale = 0.0075 }) {
     let mounted = true
     
     // Load the base model (Idle) first
-    loader.load('/models/panda/Idle.fbx', (fbx) => {
+    loader.load('/models/panda/Drunk_Idle.fbx', (fbx) => {
       if (!mounted) return
       
       // Scale and setup the model
