@@ -115,7 +115,7 @@ export function Game() {
         <Lights />
         <Ground />
 
-        <Maze walls={walls} exitPosition={exitPosition} mazeSize={Math.max(MAZE_WIDTH, MAZE_HEIGHT) / 2} />
+        <Maze walls={walls} exitPosition={exitPosition} mazeData={mazeData} />
 
         {gameState === 'playing' && (
           <Player
