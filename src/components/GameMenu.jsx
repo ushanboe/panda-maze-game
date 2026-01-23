@@ -1,5 +1,7 @@
 import { useGameStore } from '../stores/gameStore'
 
+const VERSION = '1.0'
+
 export function GameMenu() {
   const gameState = useGameStore(state => state.gameState)
   const timeRemaining = useGameStore(state => state.timeRemaining)
@@ -34,11 +36,19 @@ export function GameMenu() {
           <h1 style={{
             fontSize: '48px',
             color: '#4a7c59',
-            marginBottom: '10px',
+            marginBottom: '5px',
             textShadow: '0 0 20px rgba(74, 124, 89, 0.5)'
           }}>
             🐼 Panda Maze Escape
           </h1>
+          <p style={{
+            fontSize: '14px',
+            color: '#888',
+            marginBottom: '5px',
+            fontFamily: 'monospace'
+          }}>
+            Version {VERSION}
+          </p>
           <p style={{
             fontSize: '18px',
             color: '#aaa',
@@ -54,7 +64,8 @@ export function GameMenu() {
             textAlign: 'center'
           }}>
             <p style={{ color: '#ccc', margin: '5px 0' }}>⏱️ You have 3 minutes to escape</p>
-            <p style={{ color: '#ccc', margin: '5px 0' }}>🎮 Use WASD or Arrow Keys to move</p>
+            <p style={{ color: '#ccc', margin: '5px 0' }}>🎮 Tap WASD or Arrow Keys to move</p>
+            <p style={{ color: '#ccc', margin: '5px 0' }}>🕹️ Pac-Man style: tap direction to go!</p>
             <p style={{ color: '#ccc', margin: '5px 0' }}>🗺️ Follow the minimap to find the exit</p>
             <p style={{ color: '#00ff88', margin: '5px 0' }}>✨ Reach the green portal to win!</p>
           </div>
@@ -135,6 +146,17 @@ export function GameMenu() {
       >
         {gameState === 'menu' ? '🎮 Start Game' : '🔄 Play Again'}
       </button>
+      
+      {/* Footer version on all screens */}
+      <p style={{
+        position: 'absolute',
+        bottom: '20px',
+        fontSize: '12px',
+        color: '#555',
+        fontFamily: 'monospace'
+      }}>
+        Panda Maze Escape v{VERSION}
+      </p>
     </div>
   )
 }
