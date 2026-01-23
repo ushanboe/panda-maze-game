@@ -103,10 +103,11 @@ function gridToWorld(gridX, gridY, mazeData) {
 function generateCollectibles(mazeData) {
   const { grid, start, exit, width, height } = mazeData
 
-  // Find all PATH cells (grid value = 0)
+  // Find all PATH cells - ONLY at odd coordinates (actual path cell centers)
+  // The maze uses odd coords for path centers, even coords for walls/connectors
   const pathCells = []
-  for (let y = 0; y < height; y++) {
-    for (let x = 0; x < width; x++) {
+  for (let y = 1; y < height - 1; y += 2) {  // Only odd y values
+    for (let x = 1; x < width - 1; x += 2) {  // Only odd x values
       if (grid[y][x] === 0) {
         // Calculate distance from start and exit in grid coords
         const distFromStart = Math.hypot(x - start.x, y - start.y)
@@ -114,11 +115,11 @@ function generateCollectibles(mazeData) {
 
         // Don't place too close to start (within 2 cells) or exit (within 2 cells)
         if (distFromStart > 2 && distFromExit > 2) {
-          pathCells.push({ 
-            gridX: x, 
-            gridY: y, 
+          pathCells.push({
+            gridX: x,
+            gridY: y,
             distFromStart,
-            distFromExit 
+            distFromExit
           })
         }
       }
