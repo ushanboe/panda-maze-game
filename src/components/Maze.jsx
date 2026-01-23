@@ -1,4 +1,5 @@
-import { useMemo, useEffect } from 'react'
+
+import { useMemo, useEffect, useRef } from 'react'
 import * as THREE from 'three'
 import { useGameStore } from '../stores/gameStore'
 import { gridToWorld } from '../utils/mazeGenerator'
@@ -120,13 +121,18 @@ function generateCollectibles(mazeData) {
     }
   }
 
-  console.log('Path cells found:', pathCells.length)
+  console.log('🪙 Path cells found:', pathCells.length)
+
+  if (pathCells.length === 0) {
+    console.warn('No path cells found!')
+    return { coins: [], treasure10KPos: { x: 0, z: 0 }, treasure50KPos: { x: 0, z: 0 } }
+  }
 
   // Sort by distance from exit (furthest first)
   const sortedByExitDist = [...pathCells].sort((a, b) => b.distFromExit - a.distFromExit)
 
   // 50K treasure at THE FURTHEST point from exit
-  const treasure50KCell = sortedByExitDist[0] || { gridX: start.x, gridY: start.y }
+  const treasure50KCell = sortedByExitDist[0]
   const treasure50KWorld = gridToWorld(treasure50KCell.gridX, treasure50KCell.gridY, mazeData, CELL_SIZE)
 
   // 10K treasure at a point far from both exit AND 50K treasure
@@ -139,6 +145,11 @@ function generateCollectibles(mazeData) {
     }
   }
   const treasure10KWorld = gridToWorld(treasure10KCell.gridX, treasure10KCell.gridY, mazeData, CELL_SIZE)
+
+  console.log('📦 Treasure positions:', {
+    '50K': treasure50KWorld,
+    '10K': treasure10KWorld
+  })
 
   // Remove used positions
   const usedGridKeys = new Set([
@@ -175,11 +186,7 @@ function generateCollectibles(mazeData) {
     }
   }
 
-  console.log('Generated collectibles:', {
-    coins: coins.length,
-    treasure10K: treasure10KWorld,
-    treasure50K: treasure50KWorld
-  })
+  console.log('🪙 Generated coins:', coins.length, coins.map(c => ({ x: c.x.toFixed(1), z: c.z.toFixed(1), value: c.value })))
 
   return {
     coins,
@@ -193,14 +200,41 @@ export function Maze({ walls, exitPosition, mazeData }) {
   const setTreasurePositions = useGameStore(state => state.setTreasurePositions)
   const gameState = useGameStore(state => state.gameState)
 
-  // Generate collectibles when game starts
+  // Track if we've generated collectibles for this maze
+  const generatedForMaze = useRef(null)
+
+  // Generate collectibles when mazeData changes AND game is playing
   useEffect(() => {
-    if (gameState === 'playing' && mazeData && mazeData.grid) {
-      const { coins, treasure10KPos, treasure50KPos } = generateCollectibles(mazeData)
-      initializeCoins(coins)
-      setTreasurePositions(treasure10KPos, treasure50KPos)
+    // Only generate if playing and we have valid mazeData
+    if (gameState !== 'playing' || !mazeData || !mazeData.grid) {
+      return
     }
+
+    // Create a unique key for this maze to prevent duplicate generation
+    const mazeKey = `${mazeData.start?.x}-${mazeData.start?.y}-${mazeData.exit?.x}-${mazeData.exit?.y}`
+
+    // Skip if we already generated for this exact maze
+    if (generatedForMaze.current === mazeKey) {
+      console.log('⏭️ Skipping collectibles generation - already done for this maze')
+      return
+    }
+
+    console.log('🎮 Generating collectibles for new maze:', mazeKey)
+    generatedForMaze.current = mazeKey
+
+    const { coins, treasure10KPos, treasure50KPos } = generateCollectibles(mazeData)
+    initializeCoins(coins)
+    setTreasurePositions(treasure10KPos, treasure50KPos)
+
+    console.log('✅ Collectibles initialized!')
   }, [gameState, mazeData, initializeCoins, setTreasurePositions])
+
+  // Reset the generation flag when game ends
+  useEffect(() => {
+    if (gameState !== 'playing') {
+      generatedForMaze.current = null
+    }
+  }, [gameState])
 
   // Safety check for exitPosition
   const safeExitPosition = exitPosition || { x: 0, z: 0 }
@@ -233,8 +267,6 @@ export function Maze({ walls, exitPosition, mazeData }) {
           distance={5}
         />
       </group>
-
-      {/* NOTE: Coins and TreasureChests are rendered by Game.jsx, not here */}
     </group>
   )
 }
