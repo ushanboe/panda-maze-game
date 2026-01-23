@@ -9,13 +9,14 @@
   align-items: center;
   background: linear-gradient(135deg, #0d1117 0%, #1a1a2e 50%, #0d1117 100%);
   z-index: 200;
+  overflow-y: auto;
 }
 
 .game-menu-content {
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 40px;
+  padding: 40px 20px;
   max-width: 400px;
   width: 90%;
 }
@@ -23,7 +24,7 @@
 /* Logo Section */
 .game-logo {
   text-align: center;
-  margin-bottom: 40px;
+  margin-bottom: 30px;
 }
 
 .logo-emoji {
@@ -64,7 +65,7 @@
   display: flex;
   flex-direction: column;
   gap: 12px;
-  margin-bottom: 40px;
+  margin-bottom: 30px;
   width: 100%;
 }
 
@@ -135,13 +136,13 @@
 /* Result Screens */
 .result-screen {
   text-align: center;
-  margin-bottom: 40px;
+  margin-bottom: 30px;
 }
 
 .result-emoji {
-  font-size: 100px;
+  font-size: 80px;
   display: block;
-  margin-bottom: 20px;
+  margin-bottom: 15px;
 }
 
 .result-screen.win .result-emoji {
@@ -154,7 +155,7 @@
 }
 
 .result-title {
-  font-size: 48px;
+  font-size: 42px;
   font-weight: 900;
   margin: 0 0 10px 0;
   letter-spacing: 4px;
@@ -171,39 +172,81 @@
 }
 
 .result-subtitle {
-  font-size: 20px;
+  font-size: 18px;
   color: #aaa;
-  margin: 0;
+  margin: 0 0 20px 0;
 }
 
-.result-stats {
-  margin-top: 30px;
-  padding: 15px 30px;
-  background: rgba(0, 255, 136, 0.1);
-  border-radius: 10px;
-  display: inline-block;
+/* Stats Container */
+.stats-container {
+  background: rgba(0, 0, 0, 0.4);
+  border-radius: 15px;
+  padding: 15px;
+  width: 100%;
+  max-width: 280px;
 }
 
-.stat-label {
-  display: block;
+.stat-row {
+  display: flex;
+  align-items: center;
+  padding: 8px 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.stat-row:last-child {
+  border-bottom: none;
+}
+
+.stat-row.bonus {
+  color: #ffd700;
+}
+
+.stat-row.total {
+  background: rgba(255, 215, 0, 0.15);
+  border-radius: 8px;
+  margin-top: 8px;
+  border-bottom: none;
+}
+
+.stat-icon {
+  font-size: 20px;
+  width: 30px;
+  text-align: center;
+}
+
+.stat-name {
+  flex: 1;
   font-size: 14px;
-  color: #888;
+  color: #aaa;
   text-transform: uppercase;
-  letter-spacing: 2px;
+  letter-spacing: 1px;
 }
 
-.stat-value {
-  display: block;
-  font-size: 36px;
-  font-weight: 700;
-  color: #00ff88;
-  margin-top: 5px;
+.stat-row.total .stat-name {
+  color: #ffd700;
+  font-weight: bold;
+}
+
+.stat-val {
+  font-size: 18px;
+  font-weight: bold;
+  color: #fff;
+  font-family: monospace;
+}
+
+.stat-row.bonus .stat-val {
+  color: #ffd700;
+}
+
+.stat-row.total .stat-val {
+  color: #ffd700;
+  font-size: 22px;
+  text-shadow: 0 0 10px rgba(255, 215, 0, 0.5);
 }
 
 /* Version */
 .version-text {
-  position: absolute;
-  bottom: 20px;
+  margin-top: 20px;
   font-size: 12px;
   color: #444;
   font-family: monospace;
@@ -212,7 +255,7 @@
 /* Mobile adjustments */
 @media (max-width: 480px) {
   .game-menu-content {
-    padding: 20px;
+    padding: 20px 15px;
   }
 
   .logo-emoji {
@@ -235,11 +278,27 @@
   }
 
   .result-title {
-    font-size: 36px;
+    font-size: 32px;
   }
 
   .result-emoji {
-    font-size: 70px;
+    font-size: 60px;
+  }
+
+  .stats-container {
+    padding: 10px;
+  }
+
+  .stat-row {
+    padding: 6px 8px;
+  }
+
+  .stat-val {
+    font-size: 16px;
+  }
+
+  .stat-row.total .stat-val {
+    font-size: 20px;
   }
 }
 

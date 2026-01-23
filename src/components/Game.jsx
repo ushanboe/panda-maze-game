@@ -7,8 +7,11 @@ import { Minimap } from './Minimap'
 import { HUD } from './HUD'
 import { GameMenu } from './GameMenu'
 import { TouchControls } from './TouchControls'
+import { ScoreDisplay } from './ScoreDisplay'
+import { PointPopups } from './PointPopup'
 import { generateMaze, getMazeWalls, gridToWorld } from '../utils/mazeGenerator'
 import { useGameStore } from '../stores/gameStore'
+import { SoundManager } from '../utils/SoundManager'
 
 const MAZE_WIDTH = 21  // Must be odd
 const MAZE_HEIGHT = 21 // Must be odd
@@ -44,6 +47,7 @@ function Lights() {
 export function Game() {
   const gameState = useGameStore(state => state.gameState)
   const winGame = useGameStore(state => state.winGame)
+  const prevGameState = useRef(gameState)
 
   // Ref to hold the setDirection function from Player
   const directionRef = useRef(null)
@@ -62,6 +66,24 @@ export function Game() {
   const exitPosition = useMemo(() => {
     return gridToWorld(mazeData.exit.x, mazeData.exit.y, mazeData, CELL_SIZE)
   }, [mazeData])
+
+  // Initialize sound manager
+  useEffect(() => {
+    SoundManager.init()
+  }, [])
+
+  // Play sounds on game state changes
+  useEffect(() => {
+    // Game started
+    if (gameState === 'playing' && prevGameState.current !== 'playing') {
+      SoundManager.gameStart()
+    }
+    // Game lost
+    if (gameState === 'lost' && prevGameState.current === 'playing') {
+      SoundManager.gameLose()
+    }
+    prevGameState.current = gameState
+  }, [gameState])
 
   // Regenerate maze when starting new game
   useEffect(() => {
@@ -93,7 +115,7 @@ export function Game() {
         <Lights />
         <Ground />
 
-        <Maze walls={walls} exitPosition={exitPosition} />
+        <Maze walls={walls} exitPosition={exitPosition} mazeSize={Math.max(MAZE_WIDTH, MAZE_HEIGHT) / 2} />
 
         {gameState === 'playing' && (
           <Player
@@ -111,6 +133,8 @@ export function Game() {
           <HUD />
           <Minimap mazeData={mazeData} walls={walls} />
           <TouchControls onDirection={handleTouchDirection} />
+          <ScoreDisplay />
+          <PointPopups />
         </>
       )}
 

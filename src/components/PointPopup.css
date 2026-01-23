@@ -1,0 +1,56 @@
+.point-popups-container {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 150;
+  pointer-events: none;
+}
+
+.point-popup {
+  font-weight: 900;
+  font-family: 'Arial Black', sans-serif;
+  animation: popupFloat 1s ease-out forwards;
+  text-align: center;
+}
+
+@keyframes popupFloat {
+  0% {
+    opacity: 0;
+    transform: translateY(20px) scale(0.5);
+  }
+  20% {
+    opacity: 1;
+    transform: translateY(0) scale(1.2);
+  }
+  40% {
+    transform: translateY(-10px) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-50px) scale(0.8);
+  }
+}
+
+/* Special animation for big values */
+.point-popup.mega {
+  animation: megaPopup 1.5s ease-out forwards;
+}
+
+@keyframes megaPopup {
+  0% {
+    opacity: 0;
+    transform: translateY(50px) scale(0.3) rotate(-10deg);
+  }
+  30% {
+    opacity: 1;
+    transform: translateY(0) scale(1.5) rotate(5deg);
+  }
+  50% {
+    transform: translateY(-20px) scale(1.2) rotate(-3deg);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-80px) scale(0.5) rotate(0deg);
+  }
+}
