@@ -9,7 +9,6 @@ useGLTF.preload('/models/treasure_chest.glb')
 // Treasure Chest Component
 export function TreasureChest({ type = '10K' }) {
   const groupRef = useRef()
-  const glowRef = useRef()
 
   const treasure10K = useGameStore(state => state.treasure10K)
   const treasure50K = useGameStore(state => state.treasure50K)
@@ -27,8 +26,8 @@ export function TreasureChest({ type = '10K' }) {
 
   const { x, z } = treasure
 
-  // Size and colors based on type
-  const scale = type === '10K' ? 0.8 : 1.2
+  // Size reduced by 40% - was 0.8/1.2, now 0.48/0.72
+  const scale = type === '10K' ? 0.48 : 0.72
   const glowColor = type === '10K' ? '#ffd700' : '#ff00ff'
 
   return (
@@ -38,12 +37,12 @@ export function TreasureChest({ type = '10K' }) {
         groupRef={groupRef}
         chestModel={chestModel}
         scale={scale}
-        type={type}
+        glowColor={glowColor}
       />
 
-      {/* Ground glow */}
-      <mesh ref={glowRef} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.05, 0]}>
-        <circleGeometry args={[scale * 2, 32]} />
+      {/* Ground glow - just a circle, no box */}
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.05, 0]}>
+        <circleGeometry args={[1.5, 32]} />
         <meshBasicMaterial color={glowColor} transparent opacity={0.3} />
       </mesh>
 
@@ -53,8 +52,8 @@ export function TreasureChest({ type = '10K' }) {
   )
 }
 
-// Floating animated chest
-function FloatingChest({ groupRef, chestModel, scale, type }) {
+// Floating animated chest - NO outer glow box
+function FloatingChest({ groupRef, chestModel, scale, glowColor }) {
   const innerRef = useRef()
 
   useFrame((state) => {
@@ -66,18 +65,10 @@ function FloatingChest({ groupRef, chestModel, scale, type }) {
     }
   })
 
-  const glowColor = type === '10K' ? '#ffd700' : '#ff00ff'
-
   return (
     <group ref={groupRef}>
       <group ref={innerRef}>
-        {/* Outer glow */}
-        <mesh>
-          <boxGeometry args={[scale * 1.5, scale * 1.2, scale * 1.2]} />
-          <meshBasicMaterial color={glowColor} transparent opacity={0.15} />
-        </mesh>
-
-        {/* The chest model */}
+        {/* The chest model only - no outer glow box */}
         <primitive 
           object={chestModel} 
           scale={scale}
