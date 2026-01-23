@@ -9,11 +9,11 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.ico', 'robots.txt'],
       manifest: {
-        name: 'Panda Maze Escape',
-        short_name: 'PandaMaze',
-        description: 'Help the panda escape the bamboo maze!',
+        name: 'Go Panda Run',
+        short_name: 'GoPandaRun',
+        description: 'Help the panda escape the bamboo maze! A retro arcade game.',
         theme_color: '#4a7c59',
-        background_color: '#1a1a2e',
+        background_color: '#0a0a0f',
         display: 'standalone',
         icons: [
           {
