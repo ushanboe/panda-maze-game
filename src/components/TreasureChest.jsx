@@ -1,79 +1,80 @@
-import { useRef, useState, useMemo } from 'react'
+import { useRef, useState } from 'react'
 import { useFrame } from '@react-three/fiber'
-import { useGLTF } from '@react-three/drei'
 import { useGameStore } from '../stores/gameStore'
 
-// Preload the treasure chest model
-useGLTF.preload('/models/treasure_chest.glb')
-
-// Treasure Chest Component
+// Simple Treasure Chest using basic geometry (no GLB to avoid loading issues)
 export function TreasureChest({ type = '10K' }) {
   const groupRef = useRef()
+  const innerRef = useRef()
 
   const treasure10K = useGameStore(state => state.treasure10K)
   const treasure50K = useGameStore(state => state.treasure50K)
 
   const treasure = type === '10K' ? treasure10K : treasure50K
 
-  // Load the GLB model
-  const { scene } = useGLTF('/models/treasure_chest.glb')
-
-  // Clone the scene so each chest has its own instance
-  const chestModel = useMemo(() => scene.clone(), [scene])
-
-  // Don't render if collected
-  if (treasure.collected) return null
+  // Don't render if collected or not visible
+  if (treasure.collected || !treasure.visible) return null
 
   const { x, z } = treasure
 
-  // Size reduced by 40% - was 0.8/1.2, now 0.48/0.72
-  const scale = type === '10K' ? 0.48 : 0.72
+  // Size reduced by 40%
+  const scale = type === '10K' ? 0.6 : 0.9
   const glowColor = type === '10K' ? '#ffd700' : '#ff00ff'
+  const chestColor = type === '10K' ? '#8B4513' : '#4B0082'
 
-  return (
-    <group position={[x, 0, z]}>
-      {/* Floating chest with animation */}
-      <FloatingChest
-        groupRef={groupRef}
-        chestModel={chestModel}
-        scale={scale}
-        glowColor={glowColor}
-      />
-
-      {/* Ground glow - just a circle, no box */}
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.05, 0]}>
-        <circleGeometry args={[1.5, 32]} />
-        <meshBasicMaterial color={glowColor} transparent opacity={0.3} />
-      </mesh>
-
-      {/* Particle beam */}
-      <ParticleBeam color={glowColor} />
-    </group>
-  )
-}
-
-// Floating animated chest - NO outer glow box
-function FloatingChest({ groupRef, chestModel, scale, glowColor }) {
-  const innerRef = useRef()
-
+  // Animation
   useFrame((state) => {
     if (innerRef.current) {
       // Float up and down
-      innerRef.current.position.y = 0.5 + Math.sin(state.clock.elapsedTime * 1.5) * 0.2
+      innerRef.current.position.y = 0.8 + Math.sin(state.clock.elapsedTime * 1.5) * 0.2
       // Gentle rotation
       innerRef.current.rotation.y = Math.sin(state.clock.elapsedTime * 0.5) * 0.3
     }
   })
 
   return (
-    <group ref={groupRef}>
-      <group ref={innerRef}>
-        {/* The chest model only - no outer glow box */}
-        <primitive 
-          object={chestModel} 
-          scale={scale}
-        />
+    <group position={[x, 0, z]} ref={groupRef}>
+      {/* Ground glow */}
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.05, 0]}>
+        <circleGeometry args={[1.5, 32]} />
+        <meshBasicMaterial color={glowColor} transparent opacity={0.4} />
+      </mesh>
+
+      {/* Floating chest */}
+      <group ref={innerRef} position={[0, 0.8, 0]}>
+        {/* Chest base (box) */}
+        <mesh position={[0, 0, 0]}>
+          <boxGeometry args={[1.2 * scale, 0.8 * scale, 0.8 * scale]} />
+          <meshStandardMaterial color={chestColor} metalness={0.3} roughness={0.7} />
+        </mesh>
+
+        {/* Chest lid (slightly open) */}
+        <mesh position={[0, 0.5 * scale, -0.2 * scale]} rotation={[-0.3, 0, 0]}>
+          <boxGeometry args={[1.2 * scale, 0.2 * scale, 0.8 * scale]} />
+          <meshStandardMaterial color={chestColor} metalness={0.3} roughness={0.7} />
+        </mesh>
+
+        {/* Gold trim */}
+        <mesh position={[0, 0.1 * scale, 0.41 * scale]}>
+          <boxGeometry args={[1.0 * scale, 0.15 * scale, 0.05 * scale]} />
+          <meshStandardMaterial color="#ffd700" metalness={0.8} roughness={0.2} />
+        </mesh>
+
+        {/* Lock */}
+        <mesh position={[0, 0.2 * scale, 0.42 * scale]}>
+          <boxGeometry args={[0.15 * scale, 0.2 * scale, 0.05 * scale]} />
+          <meshStandardMaterial color="#ffd700" metalness={0.8} roughness={0.2} />
+        </mesh>
+
+        {/* Glowing coins inside */}
+        <mesh position={[0, 0.3 * scale, 0]}>
+          <sphereGeometry args={[0.3 * scale, 16, 16]} />
+          <meshBasicMaterial color="#ffd700" />
+        </mesh>
       </group>
+
+      {/* Particle beam */}
+      <ParticleBeam color={glowColor} />
     </group>
   )
 }
