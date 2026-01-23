@@ -4,16 +4,23 @@ import { useGameStore } from '../stores/gameStore'
 import { AnimatedPanda } from './AnimatedPanda'
 import * as THREE from 'three'
 
-const PLAYER_SPEED = 4
-const PLAYER_RADIUS = 0.4
+// PAC-MAN STYLE GRID MOVEMENT
 const CELL_SIZE = 2
+const MOVE_SPEED = 8 // Fast snappy movement
+const PLAYER_RADIUS = 0.4
 
 export function Player({ mazeData, walls, onReachExit }) {
   const groupRef = useRef()
   const { camera } = useThree()
   const [isMoving, setIsMoving] = useState(false)
   const [hasWon, setHasWon] = useState(false)
-  const keysRef = useRef({ up: false, down: false, left: false, right: false })
+  
+  // Grid-based movement state
+  const currentPosRef = useRef({ x: 0, z: 0 }) // Current position
+  const targetPosRef = useRef({ x: 0, z: 0 })  // Target position (one cell away)
+  const isMovingRef = useRef(false) // Are we currently moving to target?
+  const directionRef = useRef(0) // 0=up, 1=right, 2=down, 3=left
+  const queuedDirectionRef = useRef(-1) // Queued direction for next move
   
   const gameState = useGameStore(state => state.gameState)
   const updatePlayerPosition = useGameStore(state => state.updatePlayerPosition)
@@ -29,72 +36,7 @@ export function Player({ mazeData, walls, onReachExit }) {
     z: (mazeData.exit.y - mazeData.height / 2) * CELL_SIZE + CELL_SIZE / 2
   }
   
-  // Handle keyboard input - WORLD RELATIVE
-  useEffect(() => {
-    const handleKeyDown = (e) => {
-      if (gameState !== 'playing') return
-      
-      switch(e.code) {
-        case 'KeyW':
-        case 'ArrowUp':
-          keysRef.current.up = true
-          break
-        case 'KeyS':
-        case 'ArrowDown':
-          keysRef.current.down = true
-          break
-        case 'KeyA':
-        case 'ArrowLeft':
-          keysRef.current.left = true
-          break
-        case 'KeyD':
-        case 'ArrowRight':
-          keysRef.current.right = true
-          break
-      }
-    }
-    
-    const handleKeyUp = (e) => {
-      switch(e.code) {
-        case 'KeyW':
-        case 'ArrowUp':
-          keysRef.current.up = false
-          break
-        case 'KeyS':
-        case 'ArrowDown':
-          keysRef.current.down = false
-          break
-        case 'KeyA':
-        case 'ArrowLeft':
-          keysRef.current.left = false
-          break
-        case 'KeyD':
-        case 'ArrowRight':
-          keysRef.current.right = false
-          break
-      }
-    }
-    
-    window.addEventListener('keydown', handleKeyDown)
-    window.addEventListener('keyup', handleKeyUp)
-    
-    return () => {
-      window.removeEventListener('keydown', handleKeyDown)
-      window.removeEventListener('keyup', handleKeyUp)
-    }
-  }, [gameState])
-  
-  // Initialize position
-  useEffect(() => {
-    if (groupRef.current) {
-      groupRef.current.position.set(startPos.x, 0, startPos.z)
-      groupRef.current.rotation.y = 0
-      updatePlayerPosition(startPos.x, startPos.z, 0)
-    }
-    setHasWon(false)
-  }, [mazeData])
-  
-  // Check collision with walls
+  // Check collision with walls at a specific position
   const checkCollision = (x, z) => {
     for (const wall of walls) {
       const dx = Math.abs(x - wall.x)
@@ -106,6 +48,78 @@ export function Player({ mazeData, walls, onReachExit }) {
     return false
   }
   
+  // Try to move in a direction (0=up/forward, 1=right, 2=down/back, 3=left)
+  const tryMove = (direction) => {
+    if (isMovingRef.current) {
+      // Queue this direction for when current move finishes
+      queuedDirectionRef.current = direction
+      return
+    }
+    
+    const current = currentPosRef.current
+    let targetX = current.x
+    let targetZ = current.z
+    
+    // Calculate target based on direction
+    switch(direction) {
+      case 0: targetZ -= CELL_SIZE; break // Up (W) - negative Z
+      case 1: targetX += CELL_SIZE; break // Right (D) - positive X
+      case 2: targetZ += CELL_SIZE; break // Down (S) - positive Z
+      case 3: targetX -= CELL_SIZE; break // Left (A) - negative X
+    }
+    
+    // Check if target is valid (no wall)
+    if (!checkCollision(targetX, targetZ)) {
+      targetPosRef.current = { x: targetX, z: targetZ }
+      directionRef.current = direction
+      isMovingRef.current = true
+      setIsMoving(true)
+    }
+  }
+  
+  // Handle keyboard input - PAC-MAN STYLE (single press = one cell move)
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (gameState !== 'playing') return
+      if (e.repeat) return // Ignore key repeat for snappy control
+      
+      switch(e.code) {
+        case 'KeyW':
+        case 'ArrowUp':
+          tryMove(0) // Up
+          break
+        case 'KeyD':
+        case 'ArrowRight':
+          tryMove(1) // Right
+          break
+        case 'KeyS':
+        case 'ArrowDown':
+          tryMove(2) // Down
+          break
+        case 'KeyA':
+        case 'ArrowLeft':
+          tryMove(3) // Left
+          break
+      }
+    }
+    
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [gameState, walls])
+  
+  // Initialize position
+  useEffect(() => {
+    if (groupRef.current) {
+      groupRef.current.position.set(startPos.x, 0, startPos.z)
+      groupRef.current.rotation.y = 0
+      currentPosRef.current = { x: startPos.x, z: startPos.z }
+      targetPosRef.current = { x: startPos.x, z: startPos.z }
+      isMovingRef.current = false
+      updatePlayerPosition(startPos.x, startPos.z, 0)
+    }
+    setHasWon(false)
+  }, [mazeData])
+  
   // Check if reached exit
   const checkExit = (x, z) => {
     const dx = Math.abs(x - exitPos.x)
@@ -114,86 +128,67 @@ export function Player({ mazeData, walls, onReachExit }) {
   }
   
   useFrame((state, delta) => {
-    if (!groupRef.current || gameState !== 'playing') {
-      return
-    }
+    if (!groupRef.current || gameState !== 'playing') return
     
-    const { up, down, left, right } = keysRef.current
-    const currentPos = groupRef.current.position
+    const pos = groupRef.current.position
+    const target = targetPosRef.current
+    const current = currentPosRef.current
     
-    // Calculate world-relative movement
-    let moveX = 0
-    let moveZ = 0
-    
-    if (up) moveZ -= PLAYER_SPEED * delta    // W = move forward (negative Z)
-    if (down) moveZ += PLAYER_SPEED * delta  // S = move backward (positive Z)
-    if (left) moveX -= PLAYER_SPEED * delta  // A = move left (negative X)
-    if (right) moveX += PLAYER_SPEED * delta // D = move right (positive X)
-    
-    // Update moving state for animation
-    const nowMoving = up || down || left || right
-    if (nowMoving !== isMoving) {
-      setIsMoving(nowMoving)
-    }
-    
-    // Auto-rotate panda to face movement direction
-    if (moveX !== 0 || moveZ !== 0) {
-      const targetAngle = Math.atan2(moveX, moveZ)
-      // Smooth rotation
-      let currentAngle = groupRef.current.rotation.y
-      let angleDiff = targetAngle - currentAngle
+    if (isMovingRef.current) {
+      // Move towards target
+      const dx = target.x - pos.x
+      const dz = target.z - pos.z
+      const dist = Math.sqrt(dx * dx + dz * dz)
       
-      // Normalize angle difference to -PI to PI
-      while (angleDiff > Math.PI) angleDiff -= Math.PI * 2
-      while (angleDiff < -Math.PI) angleDiff += Math.PI * 2
-      
-      groupRef.current.rotation.y += angleDiff * 0.2
-    }
-    
-    // Apply movement with collision detection
-    if (moveX !== 0 || moveZ !== 0) {
-      const newX = currentPos.x + moveX
-      const newZ = currentPos.z + moveZ
-      
-      // Try full movement first
-      if (!checkCollision(newX, newZ)) {
-        currentPos.x = newX
-        currentPos.z = newZ
+      if (dist < 0.1) {
+        // Reached target - snap to grid
+        pos.x = target.x
+        pos.z = target.z
+        currentPosRef.current = { x: target.x, z: target.z }
+        isMovingRef.current = false
+        setIsMoving(false)
+        
+        // Check for queued direction
+        if (queuedDirectionRef.current >= 0) {
+          const queued = queuedDirectionRef.current
+          queuedDirectionRef.current = -1
+          tryMove(queued)
+        }
+        
+        // Check win
+        if (checkExit(pos.x, pos.z) && !hasWon) {
+          setHasWon(true)
+          onReachExit()
+        }
       } else {
-        // Try sliding along X axis only
-        if (!checkCollision(newX, currentPos.z)) {
-          currentPos.x = newX
-        }
-        // Try sliding along Z axis only
-        else if (!checkCollision(currentPos.x, newZ)) {
-          currentPos.z = newZ
-        }
-        // Fully blocked - don't move
+        // Move towards target
+        const moveAmount = MOVE_SPEED * delta
+        pos.x += (dx / dist) * Math.min(moveAmount, dist)
+        pos.z += (dz / dist) * Math.min(moveAmount, dist)
       }
       
-      // Update store
-      updatePlayerPosition(currentPos.x, currentPos.z, groupRef.current.rotation.y)
+      // Rotate panda to face movement direction
+      const targetRotation = [Math.PI, -Math.PI/2, 0, Math.PI/2][directionRef.current]
+      let rotDiff = targetRotation - groupRef.current.rotation.y
+      while (rotDiff > Math.PI) rotDiff -= Math.PI * 2
+      while (rotDiff < -Math.PI) rotDiff += Math.PI * 2
+      groupRef.current.rotation.y += rotDiff * 0.3
       
-      // Check win condition
-      if (checkExit(currentPos.x, currentPos.z) && !hasWon) {
-        setHasWon(true)
-        onReachExit()
-      }
+      updatePlayerPosition(pos.x, pos.z, groupRef.current.rotation.y)
     }
     
-    // Fixed camera position - top-down angled view
-    const playerPos = groupRef.current.position
+    // Camera follows player - fixed angle
     const cameraDistance = 12
     const cameraHeight = 10
     
     const targetCameraPos = new THREE.Vector3(
-      playerPos.x,
-      playerPos.y + cameraHeight,
-      playerPos.z + cameraDistance
+      pos.x,
+      pos.y + cameraHeight,
+      pos.z + cameraDistance
     )
     
-    camera.position.lerp(targetCameraPos, 0.05)
-    camera.lookAt(playerPos.x, playerPos.y, playerPos.z)
+    camera.position.lerp(targetCameraPos, 0.08)
+    camera.lookAt(pos.x, pos.y, pos.z)
   })
   
   return (
