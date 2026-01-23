@@ -10,7 +10,6 @@ const CELL_SIZE = 2
 const MOVE_SPEED = 6
 const PLAYER_RADIUS = 0.4
 const COLLECT_RADIUS = 1.2 // Radius for collecting items
-const EXIT_PROXIMITY = 8 // Distance to trigger 50K chest
 
 export function Player({ mazeData, walls, onReachExit, onDirectionRef }) {
   const groupRef = useRef()
@@ -90,7 +89,7 @@ export function Player({ mazeData, walls, onReachExit, onDirectionRef }) {
     }
 
     // Check 50K treasure
-    if (treasure50K.visible && !treasure50K.collected) {
+    if (!treasure50K.collected) {  // 50K now always visible at furthest point
       const dist50K = Math.hypot(x - treasure50K.x, z - treasure50K.z)
       if (dist50K < COLLECT_RADIUS) {
         if (collectTreasure50K()) {
@@ -99,12 +98,8 @@ export function Player({ mazeData, walls, onReachExit, onDirectionRef }) {
       }
     }
 
-    // Check proximity to exit (trigger 50K chest)
-    const distToExit = Math.hypot(x - exitPos.x, z - exitPos.z)
-    if (distToExit < EXIT_PROXIMITY && !treasure50K.visible) {
-      console.log('🎁 Near exit! Distance:', distToExit.toFixed(2), '- Triggering 50K chest!')
-      setNearExit(true)
-    }
+    // 50K treasure is now at furthest point from exit, always visible from start
+    // No proximity trigger needed
   }
 
   // Get next cell position in a direction

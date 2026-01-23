@@ -20,7 +20,7 @@ const CELL_SIZE = 2
 function Ground() {
   return (
     <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, 0]} receiveShadow>
-      <planeGeometry args={[200, 200]} />
+      <planeGeometry args={[500, 500]} />
       <meshStandardMaterial color="#3d5c3d" />
     </mesh>
   )
@@ -112,6 +112,7 @@ export function Game() {
         style={{ background: '#1a1a2e' }}
       >
         <Sky sunPosition={[100, 50, 100]} />
+        <fog attach="fog" args={['#87ceeb', 40, 100]} />
         <Lights />
         <Ground />
 

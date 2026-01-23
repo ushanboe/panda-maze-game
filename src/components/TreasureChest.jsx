@@ -17,7 +17,7 @@ export function TreasureChest({ type = '10K' }) {
 
   // Don't render if collected or (for 50K) not visible yet
   if (treasure.collected) return null
-  if (type === '50K' && !treasure.visible) return null
+  // 50K is now at furthest point, always visible (removed proximity trigger)
 
   const { x, z } = treasure
 

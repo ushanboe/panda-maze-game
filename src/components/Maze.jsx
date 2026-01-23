@@ -122,18 +122,16 @@ function generateCollectibles(mazeData) {
     }
   }
 
-  // Sort by distance from exit (furthest first) for 10K placement
+  // Sort by distance from exit (furthest first)
   const sortedByExitDist = [...pathCells].sort((a, b) => b.distFromExit - a.distFromExit)
 
-  // 10K treasure at furthest point from exit (hardest to reach)
-  const treasure10KCell = sortedByExitDist.length > 0 ? sortedByExitDist[0] : { gridX: start.x, gridY: start.y }
-  const treasure10KWorld = gridToWorld(treasure10KCell.gridX, treasure10KCell.gridY, mazeData, CELL_SIZE)
-
-  // 50K treasure appears NEAR THE EXIT (reward for almost winning)
-  // Find a path cell close to exit but not ON the exit
-  const sortedByExitDistAsc = [...pathCells].sort((a, b) => a.distFromExit - b.distFromExit)
-  const treasure50KCell = sortedByExitDistAsc.length > 0 ? sortedByExitDistAsc[0] : { gridX: exit.x, gridY: exit.y }
+  // 50K treasure at THE FURTHEST point from exit (biggest reward for exploration)
+  const treasure50KCell = sortedByExitDist.length > 0 ? sortedByExitDist[0] : { gridX: start.x, gridY: start.y }
   const treasure50KWorld = gridToWorld(treasure50KCell.gridX, treasure50KCell.gridY, mazeData, CELL_SIZE)
+
+  // 10K treasure at SECOND furthest point from exit
+  const treasure10KCell = sortedByExitDist.length > 1 ? sortedByExitDist[1] : sortedByExitDist[0] || { gridX: start.x, gridY: start.y }
+  const treasure10KWorld = gridToWorld(treasure10KCell.gridX, treasure10KCell.gridY, mazeData, CELL_SIZE)
 
   // Remove used positions from available cells
   const usedGridKeys = new Set([
