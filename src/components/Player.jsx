@@ -62,9 +62,9 @@ export function Player({ mazeData, walls, onReachExit }) {
   const getRotationForDirection = (direction) => {
     switch(direction) {
       case 0: return Math.PI     // Up - face away from camera
-      case 1: return -Math.PI/2  // Right
+      case 1: return Math.PI/2  // Right
       case 2: return 0           // Down - face camera
-      case 3: return Math.PI/2   // Left
+      case 3: return -Math.PI/2   // Left
       default: return 0
     }
   }
