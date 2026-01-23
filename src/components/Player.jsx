@@ -4,9 +4,9 @@ import { useGameStore } from '../stores/gameStore'
 import { AnimatedPanda } from './AnimatedPanda'
 import * as THREE from 'three'
 
-// PAC-MAN STYLE GRID MOVEMENT
+// PAC-MAN STYLE: Tap direction = turn + move until wall
 const CELL_SIZE = 2
-const MOVE_SPEED = 8 // Fast snappy movement
+const MOVE_SPEED = 6
 const PLAYER_RADIUS = 0.4
 
 export function Player({ mazeData, walls, onReachExit }) {
@@ -15,12 +15,11 @@ export function Player({ mazeData, walls, onReachExit }) {
   const [isMoving, setIsMoving] = useState(false)
   const [hasWon, setHasWon] = useState(false)
   
-  // Grid-based movement state
-  const currentPosRef = useRef({ x: 0, z: 0 }) // Current position
-  const targetPosRef = useRef({ x: 0, z: 0 })  // Target position (one cell away)
-  const isMovingRef = useRef(false) // Are we currently moving to target?
-  const directionRef = useRef(0) // 0=up, 1=right, 2=down, 3=left
-  const queuedDirectionRef = useRef(-1) // Queued direction for next move
+  // Movement state
+  const currentPosRef = useRef({ x: 0, z: 0 })
+  const targetPosRef = useRef({ x: 0, z: 0 })
+  const directionRef = useRef(-1) // -1=stopped, 0=up, 1=right, 2=down, 3=left
+  const isMovingRef = useRef(false)
   
   const gameState = useGameStore(state => state.gameState)
   const updatePlayerPosition = useGameStore(state => state.updatePlayerPosition)
@@ -48,57 +47,67 @@ export function Player({ mazeData, walls, onReachExit }) {
     return false
   }
   
-  // Try to move in a direction (0=up/forward, 1=right, 2=down/back, 3=left)
-  const tryMove = (direction) => {
-    if (isMovingRef.current) {
-      // Queue this direction for when current move finishes
-      queuedDirectionRef.current = direction
-      return
-    }
-    
-    const current = currentPosRef.current
-    let targetX = current.x
-    let targetZ = current.z
-    
-    // Calculate target based on direction
+  // Get next cell position in a direction
+  const getNextCell = (x, z, direction) => {
     switch(direction) {
-      case 0: targetZ -= CELL_SIZE; break // Up (W) - negative Z
-      case 1: targetX += CELL_SIZE; break // Right (D) - positive X
-      case 2: targetZ += CELL_SIZE; break // Down (S) - positive Z
-      case 3: targetX -= CELL_SIZE; break // Left (A) - negative X
+      case 0: return { x, z: z - CELL_SIZE } // Up (W) - negative Z
+      case 1: return { x: x + CELL_SIZE, z } // Right (D) - positive X
+      case 2: return { x, z: z + CELL_SIZE } // Down (S) - positive Z
+      case 3: return { x: x - CELL_SIZE, z } // Left (A) - negative X
+      default: return { x, z }
     }
+  }
+  
+  // Get rotation for direction
+  const getRotationForDirection = (direction) => {
+    switch(direction) {
+      case 0: return Math.PI     // Up - face away from camera
+      case 1: return -Math.PI/2  // Right
+      case 2: return 0           // Down - face camera
+      case 3: return Math.PI/2   // Left
+      default: return 0
+    }
+  }
+  
+  // Set direction and start moving
+  const setDirection = (direction) => {
+    // Always update direction (turn the panda)
+    directionRef.current = direction
     
-    // Check if target is valid (no wall)
-    if (!checkCollision(targetX, targetZ)) {
-      targetPosRef.current = { x: targetX, z: targetZ }
-      directionRef.current = direction
+    // Check if we can move in this direction
+    const current = currentPosRef.current
+    const next = getNextCell(current.x, current.z, direction)
+    
+    if (!checkCollision(next.x, next.z)) {
+      // Can move - set target and start moving
+      targetPosRef.current = next
       isMovingRef.current = true
       setIsMoving(true)
     }
   }
   
-  // Handle keyboard input - PAC-MAN STYLE (single press = one cell move)
+  // Handle keyboard input
   useEffect(() => {
     const handleKeyDown = (e) => {
       if (gameState !== 'playing') return
-      if (e.repeat) return // Ignore key repeat for snappy control
+      if (e.repeat) return
       
       switch(e.code) {
         case 'KeyW':
         case 'ArrowUp':
-          tryMove(0) // Up
+          setDirection(0)
           break
         case 'KeyD':
         case 'ArrowRight':
-          tryMove(1) // Right
+          setDirection(1)
           break
         case 'KeyS':
         case 'ArrowDown':
-          tryMove(2) // Down
+          setDirection(2)
           break
         case 'KeyA':
         case 'ArrowLeft':
-          tryMove(3) // Left
+          setDirection(3)
           break
       }
     }
@@ -114,6 +123,7 @@ export function Player({ mazeData, walls, onReachExit }) {
       groupRef.current.rotation.y = 0
       currentPosRef.current = { x: startPos.x, z: startPos.z }
       targetPosRef.current = { x: startPos.x, z: startPos.z }
+      directionRef.current = -1
       isMovingRef.current = false
       updatePlayerPosition(startPos.x, startPos.z, 0)
     }
@@ -132,7 +142,16 @@ export function Player({ mazeData, walls, onReachExit }) {
     
     const pos = groupRef.current.position
     const target = targetPosRef.current
-    const current = currentPosRef.current
+    const direction = directionRef.current
+    
+    // Rotate panda to face current direction (smooth rotation)
+    if (direction >= 0) {
+      const targetRotation = getRotationForDirection(direction)
+      let rotDiff = targetRotation - groupRef.current.rotation.y
+      while (rotDiff > Math.PI) rotDiff -= Math.PI * 2
+      while (rotDiff < -Math.PI) rotDiff += Math.PI * 2
+      groupRef.current.rotation.y += rotDiff * 0.25
+    }
     
     if (isMovingRef.current) {
       // Move towards target
@@ -141,24 +160,30 @@ export function Player({ mazeData, walls, onReachExit }) {
       const dist = Math.sqrt(dx * dx + dz * dz)
       
       if (dist < 0.1) {
-        // Reached target - snap to grid
+        // Reached target cell - snap to grid
         pos.x = target.x
         pos.z = target.z
         currentPosRef.current = { x: target.x, z: target.z }
-        isMovingRef.current = false
-        setIsMoving(false)
         
-        // Check for queued direction
-        if (queuedDirectionRef.current >= 0) {
-          const queued = queuedDirectionRef.current
-          queuedDirectionRef.current = -1
-          tryMove(queued)
-        }
-        
-        // Check win
+        // Check win condition
         if (checkExit(pos.x, pos.z) && !hasWon) {
           setHasWon(true)
+          isMovingRef.current = false
+          setIsMoving(false)
+          directionRef.current = -1
           onReachExit()
+          return
+        }
+        
+        // Try to continue in same direction (Pac-Man style)
+        const next = getNextCell(pos.x, pos.z, direction)
+        if (!checkCollision(next.x, next.z)) {
+          // Can continue - set new target
+          targetPosRef.current = next
+        } else {
+          // Hit a wall - stop
+          isMovingRef.current = false
+          setIsMoving(false)
         }
       } else {
         // Move towards target
@@ -167,17 +192,10 @@ export function Player({ mazeData, walls, onReachExit }) {
         pos.z += (dz / dist) * Math.min(moveAmount, dist)
       }
       
-      // Rotate panda to face movement direction
-      const targetRotation = [Math.PI, -Math.PI/2, 0, Math.PI/2][directionRef.current]
-      let rotDiff = targetRotation - groupRef.current.rotation.y
-      while (rotDiff > Math.PI) rotDiff -= Math.PI * 2
-      while (rotDiff < -Math.PI) rotDiff += Math.PI * 2
-      groupRef.current.rotation.y += rotDiff * 0.3
-      
       updatePlayerPosition(pos.x, pos.z, groupRef.current.rotation.y)
     }
     
-    // Camera follows player - fixed angle
+    // Camera follows player - fixed angle from behind/above
     const cameraDistance = 12
     const cameraHeight = 10
     
