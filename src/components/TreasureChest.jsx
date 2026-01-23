@@ -1,46 +1,49 @@
-import { useRef, useState } from 'react'
+import { useRef, useState, useMemo } from 'react'
 import { useFrame } from '@react-three/fiber'
+import { useGLTF } from '@react-three/drei'
 import { useGameStore } from '../stores/gameStore'
-import { SoundManager } from '../utils/SoundManager'
+
+// Preload the treasure chest model
+useGLTF.preload('/models/treasure_chest.glb')
 
 // Treasure Chest Component
 export function TreasureChest({ type = '10K' }) {
-  const meshRef = useRef()
-  const [exploding, setExploding] = useState(false)
-  const [particles, setParticles] = useState([])
+  const groupRef = useRef()
+  const glowRef = useRef()
 
   const treasure10K = useGameStore(state => state.treasure10K)
   const treasure50K = useGameStore(state => state.treasure50K)
 
   const treasure = type === '10K' ? treasure10K : treasure50K
-  const value = type === '10K' ? 10000 : 50000
 
-  // Don't render if collected or (for 50K) not visible yet
+  // Load the GLB model
+  const { scene } = useGLTF('/models/treasure_chest.glb')
+
+  // Clone the scene so each chest has its own instance
+  const chestModel = useMemo(() => scene.clone(), [scene])
+
+  // Don't render if collected
   if (treasure.collected) return null
-  // 50K is now at furthest point, always visible (removed proximity trigger)
 
   const { x, z } = treasure
 
-  // Colors based on type
-  const chestColor = type === '10K' ? '#ffd700' : '#ff00ff'
-  const glowColor = type === '10K' ? '#ffaa00' : '#ff66ff'
-  const size = type === '10K' ? 0.6 : 0.8
+  // Size and colors based on type
+  const scale = type === '10K' ? 0.8 : 1.2
+  const glowColor = type === '10K' ? '#ffd700' : '#ff00ff'
 
   return (
     <group position={[x, 0, z]}>
-      {/* Floating chest */}
-      <FloatingChest 
-        meshRef={meshRef}
-        color={chestColor}
-        glowColor={glowColor}
-        size={size}
-        value={value}
+      {/* Floating chest with animation */}
+      <FloatingChest
+        groupRef={groupRef}
+        chestModel={chestModel}
+        scale={scale}
         type={type}
       />
 
       {/* Ground glow */}
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.05, 0]}>
-        <circleGeometry args={[size * 2, 32]} />
+      <mesh ref={glowRef} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.05, 0]}>
+        <circleGeometry args={[scale * 2, 32]} />
         <meshBasicMaterial color={glowColor} transparent opacity={0.3} />
       </mesh>
 
@@ -51,65 +54,35 @@ export function TreasureChest({ type = '10K' }) {
 }
 
 // Floating animated chest
-function FloatingChest({ meshRef, color, glowColor, size, value, type }) {
-  const groupRef = useRef()
+function FloatingChest({ groupRef, chestModel, scale, type }) {
+  const innerRef = useRef()
 
   useFrame((state) => {
-    if (groupRef.current) {
+    if (innerRef.current) {
       // Float up and down
-      groupRef.current.position.y = 1 + Math.sin(state.clock.elapsedTime * 1.5) * 0.2
+      innerRef.current.position.y = 0.5 + Math.sin(state.clock.elapsedTime * 1.5) * 0.2
       // Gentle rotation
-      groupRef.current.rotation.y = Math.sin(state.clock.elapsedTime * 0.5) * 0.3
+      innerRef.current.rotation.y = Math.sin(state.clock.elapsedTime * 0.5) * 0.3
     }
   })
 
+  const glowColor = type === '10K' ? '#ffd700' : '#ff00ff'
+
   return (
     <group ref={groupRef}>
-      {/* Outer glow */}
-      <mesh>
-        <boxGeometry args={[size * 1.8, size * 1.4, size * 1.4]} />
-        <meshBasicMaterial color={glowColor} transparent opacity={0.2} />
-      </mesh>
+      <group ref={innerRef}>
+        {/* Outer glow */}
+        <mesh>
+          <boxGeometry args={[scale * 1.5, scale * 1.2, scale * 1.2]} />
+          <meshBasicMaterial color={glowColor} transparent opacity={0.15} />
+        </mesh>
 
-      {/* Chest body */}
-      <mesh ref={meshRef} castShadow>
-        <boxGeometry args={[size * 1.2, size * 0.8, size * 0.8]} />
-        <meshStandardMaterial
-          color={color}
-          emissive={glowColor}
-          emissiveIntensity={0.5}
-          metalness={0.7}
-          roughness={0.3}
+        {/* The chest model */}
+        <primitive 
+          object={chestModel} 
+          scale={scale}
         />
-      </mesh>
-
-      {/* Chest lid */}
-      <mesh position={[0, size * 0.5, 0]} castShadow>
-        <boxGeometry args={[size * 1.3, size * 0.3, size * 0.9]} />
-        <meshStandardMaterial
-          color={color}
-          emissive={glowColor}
-          emissiveIntensity={0.3}
-          metalness={0.8}
-          roughness={0.2}
-        />
-      </mesh>
-
-      {/* Lock/decoration */}
-      <mesh position={[0, size * 0.2, size * 0.45]}>
-        <boxGeometry args={[size * 0.3, size * 0.3, size * 0.1]} />
-        <meshStandardMaterial
-          color="#8b4513"
-          metalness={0.9}
-          roughness={0.1}
-        />
-      </mesh>
-
-      {/* Value indicator - floating text substitute */}
-      <mesh position={[0, size * 1.2, 0]}>
-        <torusGeometry args={[size * 0.4, size * 0.08, 8, 32]} />
-        <meshBasicMaterial color={type === '10K' ? '#ffffff' : '#ffff00'} />
-      </mesh>
+      </group>
     </group>
   )
 }
@@ -140,7 +113,7 @@ function ParticleBeam({ color }) {
 
 // Explosion particles (shown when collected)
 export function ExplosionParticles({ position, color, onComplete }) {
-  const [particles] = useState(() => 
+  const [particles] = useState(() =>
     Array.from({ length: 20 }, (_, i) => ({
       id: i,
       velocity: [
