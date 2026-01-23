@@ -91,42 +91,63 @@ function BambooWall({ x, z }) {
   )
 }
 
-// Generate coin and treasure positions
-function generateCollectibles(walls, exitPosition, mazeSize) {
-  const wallSet = new Set(walls.map(w => `${w.x},${w.z}`))
+// Convert grid coordinates to world coordinates (same as Player.jsx)
+function gridToWorld(gridX, gridY, mazeData) {
+  return {
+    x: (gridX - mazeData.width / 2) * CELL_SIZE + CELL_SIZE / 2,
+    z: (gridY - mazeData.height / 2) * CELL_SIZE + CELL_SIZE / 2
+  }
+}
 
-  // Find all empty cells
-  const emptyCells = []
-  for (let x = -mazeSize; x <= mazeSize; x += CELL_SIZE) {
-    for (let z = -mazeSize; z <= mazeSize; z += CELL_SIZE) {
-      if (!wallSet.has(`${x},${z}`)) {
-        const distFromStart = Math.hypot(x, z)
-        const distFromExit = Math.hypot(x - exitPosition.x, z - exitPosition.z)
-        // Don't place too close to start or exit
-        if (distFromStart > CELL_SIZE * 2 && distFromExit > CELL_SIZE * 2) {
-          emptyCells.push({ x, z, distFromExit })
+// Generate coin and treasure positions using MAZE GRID
+function generateCollectibles(mazeData) {
+  const { grid, start, exit, width, height } = mazeData
+
+  // Find all PATH cells (grid value = 0)
+  const pathCells = []
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      if (grid[y][x] === 0) {
+        // Calculate distance from start and exit in grid coords
+        const distFromStart = Math.hypot(x - start.x, y - start.y)
+        const distFromExit = Math.hypot(x - exit.x, y - exit.y)
+
+        // Don't place too close to start (within 2 cells) or exit (within 2 cells)
+        if (distFromStart > 2 && distFromExit > 2) {
+          pathCells.push({ 
+            gridX: x, 
+            gridY: y, 
+            distFromStart,
+            distFromExit 
+          })
         }
       }
     }
   }
 
-  // Sort by distance from exit (furthest first)
-  emptyCells.sort((a, b) => b.distFromExit - a.distFromExit)
+  // Sort by distance from exit (furthest first) for 10K placement
+  const sortedByExitDist = [...pathCells].sort((a, b) => b.distFromExit - a.distFromExit)
 
-  // 10K treasure at furthest point from exit
-  const treasure10KPos = emptyCells.length > 0 
-    ? { x: emptyCells[0].x, z: emptyCells[0].z }
-    : { x: 0, z: 0 }
+  // 10K treasure at furthest point from exit (hardest to reach)
+  const treasure10KCell = sortedByExitDist.length > 0 ? sortedByExitDist[0] : { gridX: start.x, gridY: start.y }
+  const treasure10KWorld = gridToWorld(treasure10KCell.gridX, treasure10KCell.gridY, mazeData)
 
-  // 50K treasure at center of maze (will appear when near exit)
-  const treasure50KPos = { x: 0, z: 0 }
+  // 50K treasure appears NEAR THE EXIT (reward for almost winning)
+  // Find a path cell close to exit but not ON the exit
+  const sortedByExitDistAsc = [...pathCells].sort((a, b) => a.distFromExit - b.distFromExit)
+  const treasure50KCell = sortedByExitDistAsc.length > 0 ? sortedByExitDistAsc[0] : { gridX: exit.x, gridY: exit.y }
+  const treasure50KWorld = gridToWorld(treasure50KCell.gridX, treasure50KCell.gridY, mazeData)
 
-  // Generate coins - avoid treasure positions
-  const usedPositions = new Set([
-    `${treasure10KPos.x},${treasure10KPos.z}`,
-    `${treasure50KPos.x},${treasure50KPos.z}`,
-    '0,0' // Start position
+  // Remove used positions from available cells
+  const usedGridKeys = new Set([
+    `${treasure10KCell.gridX},${treasure10KCell.gridY}`,
+    `${treasure50KCell.gridX},${treasure50KCell.gridY}`
   ])
+
+  const availableCells = pathCells.filter(c => !usedGridKeys.has(`${c.gridX},${c.gridY}`))
+
+  // Shuffle for random coin placement
+  const shuffledCells = availableCells.sort(() => Math.random() - 0.5)
 
   // Coin values and distribution
   const coinValues = [
@@ -138,46 +159,50 @@ function generateCollectibles(walls, exitPosition, mazeSize) {
 
   const coins = []
   let coinId = 0
-
-  // Shuffle empty cells for random placement
-  const shuffledCells = emptyCells
-    .filter(c => !usedPositions.has(`${c.x},${c.z}`))
-    .sort(() => Math.random() - 0.5)
-
   let cellIndex = 0
+
   for (const { value, count } of coinValues) {
     for (let i = 0; i < count && cellIndex < shuffledCells.length; i++) {
       const cell = shuffledCells[cellIndex++]
+      const worldPos = gridToWorld(cell.gridX, cell.gridY, mazeData)
       coins.push({
         id: coinId++,
-        x: cell.x,
-        z: cell.z,
+        x: worldPos.x,
+        z: worldPos.z,
         value,
         collected: false
       })
     }
   }
 
-  return { coins, treasure10KPos, treasure50KPos }
+  console.log('Generated collectibles:', {
+    coins: coins.length,
+    treasure10K: treasure10KWorld,
+    treasure50K: treasure50KWorld,
+    pathCellsFound: pathCells.length,
+    exitPos: gridToWorld(exit.x, exit.y, mazeData)
+  })
+
+  return { 
+    coins, 
+    treasure10KPos: treasure10KWorld, 
+    treasure50KPos: treasure50KWorld 
+  }
 }
 
-export function Maze({ walls, exitPosition, mazeSize = 10 }) {
+export function Maze({ walls, exitPosition, mazeData }) {
   const initializeCoins = useGameStore(state => state.initializeCoins)
   const setTreasurePositions = useGameStore(state => state.setTreasurePositions)
   const gameState = useGameStore(state => state.gameState)
 
   // Generate collectibles when game starts
   useEffect(() => {
-    if (gameState === 'playing') {
-      const { coins, treasure10KPos, treasure50KPos } = generateCollectibles(
-        walls, 
-        exitPosition, 
-        mazeSize * CELL_SIZE
-      )
+    if (gameState === 'playing' && mazeData) {
+      const { coins, treasure10KPos, treasure50KPos } = generateCollectibles(mazeData)
       initializeCoins(coins)
       setTreasurePositions(treasure10KPos, treasure50KPos)
     }
-  }, [gameState, walls, exitPosition, mazeSize])
+  }, [gameState, mazeData])
 
   return (
     <group>
