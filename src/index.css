@@ -6,8 +6,11 @@
 
 html, body {
   width: 100%;
-  min-height: 100%;
+  height: 100%;
   font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
+  overscroll-behavior: none;
 }
 
 body {
@@ -16,5 +19,18 @@ body {
 
 #root {
   width: 100%;
-  min-height: 100%;
+  height: 100%;
+}
+
+/* Prevent text selection during gameplay */
+.game-container {
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* Safe area padding for notched phones */
+@supports (padding: env(safe-area-inset-bottom)) {
+  .touch-controls {
+    padding-bottom: calc(20px + env(safe-area-inset-bottom));
+  }
 }

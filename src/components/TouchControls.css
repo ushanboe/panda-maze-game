@@ -1,34 +1,48 @@
 .touch-controls {
   position: fixed;
-  bottom: 20px;
-  left: 50%;
-  transform: translateX(-50%);
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
   z-index: 1000;
   pointer-events: none;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  padding: 20px;
+  padding-bottom: 40px;
 }
 
-.touch-controls-inner {
+/* Left side - LEFT button */
+.touch-left-zone {
+  display: flex;
+  align-items: center;
+  pointer-events: auto;
+  padding-bottom: 60px;
+}
+
+/* Right side - UP, DOWN, RIGHT buttons */
+.touch-right-zone {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 5px;
+  gap: 8px;
   pointer-events: auto;
 }
 
-.touch-middle-row {
+.touch-right-row {
   display: flex;
-  align-items: center;
-  gap: 5px;
+  gap: 8px;
 }
 
 .touch-btn {
-  width: 60px;
-  height: 60px;
-  border-radius: 12px;
-  border: 3px solid rgba(76, 175, 80, 0.8);
-  background: rgba(0, 0, 0, 0.5);
+  width: 70px;
+  height: 70px;
+  border-radius: 50%;
+  border: 3px solid rgba(76, 175, 80, 0.9);
+  background: rgba(0, 0, 0, 0.6);
   color: #4CAF50;
-  font-size: 24px;
+  font-size: 28px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -37,16 +51,19 @@
   -webkit-user-select: none;
   touch-action: manipulation;
   transition: all 0.1s ease;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.4);
+}
+
+.touch-btn-large {
+  width: 90px;
+  height: 90px;
+  font-size: 36px;
 }
 
 .touch-btn:active {
-  background: rgba(76, 175, 80, 0.4);
-  transform: scale(0.95);
-}
-
-.touch-center {
-  width: 60px;
-  height: 60px;
+  background: rgba(76, 175, 80, 0.5);
+  transform: scale(0.92);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
 }
 
 /* Hide on desktop, show on touch devices */
@@ -56,20 +73,45 @@
   }
 }
 
-/* Larger buttons on smaller screens */
+/* Adjust for smaller screens */
 @media (max-width: 480px) {
   .touch-btn {
+    width: 65px;
+    height: 65px;
+    font-size: 26px;
+  }
+
+  .touch-btn-large {
+    width: 80px;
+    height: 80px;
+    font-size: 32px;
+  }
+
+  .touch-controls {
+    padding: 15px;
+    padding-bottom: 30px;
+  }
+}
+
+/* Landscape mode adjustments */
+@media (max-height: 500px) {
+  .touch-btn {
+    width: 55px;
+    height: 55px;
+    font-size: 22px;
+  }
+
+  .touch-btn-large {
     width: 70px;
     height: 70px;
     font-size: 28px;
   }
 
-  .touch-center {
-    width: 70px;
-    height: 70px;
+  .touch-controls {
+    padding-bottom: 15px;
   }
 
-  .touch-controls {
-    bottom: 30px;
+  .touch-left-zone {
+    padding-bottom: 30px;
   }
 }
