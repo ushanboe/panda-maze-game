@@ -17,6 +17,13 @@ export function GameMenu() {
     return `${mins}:${secs.toString().padStart(2, '0')}`
   }
 
+  const handleStart = (e) => {
+    e.preventDefault()
+    e.stopPropagation()
+    console.log('Starting game...')
+    startGame()
+  }
+
   return (
     <div className="game-menu-overlay">
       <div className="game-menu-content">
@@ -44,7 +51,11 @@ export function GameMenu() {
               </div>
             </div>
 
-            <button className="game-btn game-btn-start" onClick={startGame}>
+            <button 
+              className="game-btn game-btn-start" 
+              onClick={handleStart}
+              onTouchEnd={handleStart}
+            >
               PLAY
             </button>
           </>
@@ -63,7 +74,11 @@ export function GameMenu() {
               </div>
             </div>
 
-            <button className="game-btn game-btn-restart" onClick={startGame}>
+            <button 
+              className="game-btn game-btn-restart" 
+              onClick={handleStart}
+              onTouchEnd={handleStart}
+            >
               PLAY AGAIN
             </button>
           </>
@@ -78,7 +93,11 @@ export function GameMenu() {
               <p className="result-subtitle">The panda got lost...</p>
             </div>
 
-            <button className="game-btn game-btn-restart" onClick={startGame}>
+            <button 
+              className="game-btn game-btn-restart" 
+              onClick={handleStart}
+              onTouchEnd={handleStart}
+            >
               TRY AGAIN
             </button>
           </>

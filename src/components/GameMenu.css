@@ -98,6 +98,11 @@
   cursor: pointer;
   transition: all 0.2s ease;
   text-transform: uppercase;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+  -webkit-user-select: none;
+  pointer-events: auto;
 }
 
 .game-btn-start {
