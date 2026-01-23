@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useMemo, useEffect, useRef } from 'react'
 import { Canvas } from '@react-three/fiber'
 import { Sky } from '@react-three/drei'
 import { Player } from './Player'
@@ -6,6 +6,7 @@ import { Maze } from './Maze'
 import { Minimap } from './Minimap'
 import { HUD } from './HUD'
 import { GameMenu } from './GameMenu'
+import { TouchControls } from './TouchControls'
 import { generateMaze, getMazeWalls, gridToWorld } from '../utils/mazeGenerator'
 import { useGameStore } from '../stores/gameStore'
 
@@ -43,33 +44,43 @@ function Lights() {
 export function Game() {
   const gameState = useGameStore(state => state.gameState)
   const winGame = useGameStore(state => state.winGame)
-  
+
+  // Ref to hold the setDirection function from Player
+  const directionRef = useRef(null)
+
   // Generate maze once and regenerate on new game
   const [mazeKey, setMazeKey] = useState(0)
-  
+
   const mazeData = useMemo(() => {
     return generateMaze(MAZE_WIDTH, MAZE_HEIGHT)
   }, [mazeKey])
-  
+
   const walls = useMemo(() => {
     return getMazeWalls(mazeData, CELL_SIZE)
   }, [mazeData])
-  
+
   const exitPosition = useMemo(() => {
     return gridToWorld(mazeData.exit.x, mazeData.exit.y, mazeData, CELL_SIZE)
   }, [mazeData])
-  
+
   // Regenerate maze when starting new game
   useEffect(() => {
     if (gameState === 'playing') {
       setMazeKey(k => k + 1)
     }
   }, [gameState])
-  
+
   const handleReachExit = () => {
     winGame()
   }
-  
+
+  // Handle touch control direction
+  const handleTouchDirection = (direction) => {
+    if (directionRef.current) {
+      directionRef.current(direction)
+    }
+  }
+
   return (
     <div style={{ width: '100vw', height: '100vh', overflow: 'hidden' }}>
       {/* 3D Canvas */}
@@ -81,26 +92,28 @@ export function Game() {
         <Sky sunPosition={[100, 50, 100]} />
         <Lights />
         <Ground />
-        
+
         <Maze walls={walls} exitPosition={exitPosition} />
-        
+
         {gameState === 'playing' && (
           <Player
             mazeData={mazeData}
             walls={walls}
             onReachExit={handleReachExit}
+            onDirectionRef={directionRef}
           />
         )}
       </Canvas>
-      
+
       {/* UI Overlays */}
       {gameState === 'playing' && (
         <>
           <HUD />
           <Minimap mazeData={mazeData} walls={walls} />
+          <TouchControls onDirection={handleTouchDirection} />
         </>
       )}
-      
+
       <GameMenu />
     </div>
   )

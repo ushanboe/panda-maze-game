@@ -9,7 +9,7 @@ const CELL_SIZE = 2
 const MOVE_SPEED = 6
 const PLAYER_RADIUS = 0.4
 
-export function Player({ mazeData, walls, onReachExit }) {
+export function Player({ mazeData, walls, onReachExit, onDirectionRef }) {
   const groupRef = useRef()
   const { camera } = useThree()
   const [isMoving, setIsMoving] = useState(false)
@@ -86,6 +86,13 @@ export function Player({ mazeData, walls, onReachExit }) {
     }
   }
   
+  // Expose setDirection to parent via ref callback
+  useEffect(() => {
+    if (onDirectionRef) {
+      onDirectionRef.current = setDirection
+    }
+  }, [onDirectionRef, walls])
+
   // Handle keyboard input
   useEffect(() => {
     const handleKeyDown = (e) => {
