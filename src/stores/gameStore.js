@@ -15,15 +15,14 @@ export const useGameStore = create((set, get) => ({
   trail: [],
   maxTrailLength: 500,
 
-  // === NEW: Points System ===
+  // Points System
   score: 0,
-  coins: [], // Array of { id, x, z, value, collected }
-  treasure10K: { x: 0, z: 0, collected: false },
-  treasure50K: { x: 0, z: 0, collected: false, visible: false },
-  nearExit: false, // Triggers 50K chest appearance
+  coins: [],
+  treasure10K: { x: 0, z: 0, collected: false, visible: true },
+  treasure50K: { x: 0, z: 0, collected: false, visible: true }, // ALWAYS VISIBLE
 
   // Point popup queue
-  pointPopups: [], // Array of { id, value, x, z }
+  pointPopups: [],
 
   // Stats for end screen
   coinsCollected: 0,
@@ -39,9 +38,8 @@ export const useGameStore = create((set, get) => ({
     playerRotation: 0,
     score: 0,
     coins: [],
-    treasure10K: { x: 0, z: 0, collected: false },
-    treasure50K: { x: 0, z: 0, collected: false, visible: false },
-    nearExit: false,
+    treasure10K: { x: 0, z: 0, collected: false, visible: true },
+    treasure50K: { x: 0, z: 0, collected: false, visible: true },
     pointPopups: [],
     coinsCollected: 0,
     chestsCollected: 0,
@@ -56,7 +54,6 @@ export const useGameStore = create((set, get) => ({
     playerRotation: 0,
     score: 0,
     coins: [],
-    nearExit: false,
     pointPopups: [],
     coinsCollected: 0,
     chestsCollected: 0,
@@ -89,7 +86,6 @@ export const useGameStore = create((set, get) => ({
     const { trail, maxTrailLength } = get()
     const lastPos = trail[trail.length - 1]
 
-    // Only add to trail if moved enough distance
     const shouldAddToTrail = !lastPos ||
       Math.hypot(x - lastPos.x, z - lastPos.z) > 0.5
 
@@ -104,18 +100,18 @@ export const useGameStore = create((set, get) => ({
     })
   },
 
-  // === NEW: Collectibles Actions ===
-
   // Initialize coins for the maze
   initializeCoins: (coinData) => {
+    console.log('Initializing coins:', coinData.length)
     set({ coins: coinData })
   },
 
-  // Set treasure chest positions
+  // Set treasure chest positions - BOTH VISIBLE FROM START
   setTreasurePositions: (pos10K, pos50K) => {
+    console.log('Setting treasure positions:', { pos10K, pos50K })
     set({
-      treasure10K: { ...pos10K, collected: false },
-      treasure50K: { ...pos50K, collected: false, visible: false }
+      treasure10K: { x: pos10K.x, z: pos10K.z, collected: false, visible: true },
+      treasure50K: { x: pos50K.x, z: pos50K.z, collected: false, visible: true }
     })
   },
 
@@ -123,13 +119,12 @@ export const useGameStore = create((set, get) => ({
   collectCoin: (coinId) => {
     const { coins, score, coinsCollected, pointPopups } = get()
     const coin = coins.find(c => c.id === coinId)
-    if (!coin || coin.collected) return
+    if (!coin || coin.collected) return null
 
-    const newCoins = coins.map(c => 
+    const newCoins = coins.map(c =>
       c.id === coinId ? { ...c, collected: true } : c
     )
 
-    // Add point popup
     const newPopup = {
       id: Date.now(),
       value: coin.value,
@@ -144,7 +139,6 @@ export const useGameStore = create((set, get) => ({
       pointPopups: [...pointPopups, newPopup]
     })
 
-    // Remove popup after animation
     setTimeout(() => {
       set(state => ({
         pointPopups: state.pointPopups.filter(p => p.id !== newPopup.id)
@@ -185,7 +179,7 @@ export const useGameStore = create((set, get) => ({
   // Collect 50K treasure
   collectTreasure50K: () => {
     const { treasure50K, score, chestsCollected, pointPopups } = get()
-    if (treasure50K.collected || !treasure50K.visible) return false
+    if (treasure50K.collected) return false
 
     const newPopup = {
       id: Date.now(),
@@ -208,17 +202,6 @@ export const useGameStore = create((set, get) => ({
     }, 2000)
 
     return true
-  },
-
-  // Trigger 50K chest visibility when near exit
-  setNearExit: (isNear) => {
-    const { nearExit, treasure50K } = get()
-    if (isNear && !nearExit && !treasure50K.collected) {
-      set({
-        nearExit: true,
-        treasure50K: { ...treasure50K, visible: true }
-      })
-    }
   },
 
   // Add time bonus to score

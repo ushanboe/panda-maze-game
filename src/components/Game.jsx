@@ -9,6 +9,8 @@ import { GameMenu } from './GameMenu'
 import { TouchControls } from './TouchControls'
 import { ScoreDisplay } from './ScoreDisplay'
 import { PointPopups } from './PointPopup'
+import { Coins } from './Coin'
+import { TreasureChest } from './TreasureChest'
 import { generateMaze, getMazeWalls, gridToWorld } from '../utils/mazeGenerator'
 import { useGameStore } from '../stores/gameStore'
 import { SoundManager } from '../utils/SoundManager'
@@ -64,6 +66,7 @@ export function Game() {
   }, [mazeData])
 
   const exitPosition = useMemo(() => {
+    if (!mazeData || !mazeData.exit) return { x: 0, z: 0 }
     return gridToWorld(mazeData.exit.x, mazeData.exit.y, mazeData, CELL_SIZE)
   }, [mazeData])
 
@@ -117,6 +120,15 @@ export function Game() {
         <Ground />
 
         <Maze walls={walls} exitPosition={exitPosition} mazeData={mazeData} />
+
+        {/* Render collectibles */}
+        {gameState === 'playing' && (
+          <>
+            <Coins />
+            <TreasureChest type="10K" />
+            <TreasureChest type="50K" />
+          </>
+        )}
 
         {gameState === 'playing' && (
           <Player

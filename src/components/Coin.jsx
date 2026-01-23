@@ -2,121 +2,147 @@ import { useRef, useMemo, Suspense } from 'react'
 import { useFrame } from '@react-three/fiber'
 import { useGLTF } from '@react-three/drei'
 import { useGameStore } from '../stores/gameStore'
+import { ErrorBoundary } from './ErrorBoundary'
 
-// Coin configurations
+// Preload all coin models at module level
+useGLTF.preload('/models/silver_coin.glb')
+useGLTF.preload('/models/gold_coin.glb')
+useGLTF.preload('/models/vcoin.glb')
+
+// ============================================
+// FALLBACK COIN - Simple geometry, always works
+// ============================================
+function FallbackCoin({ color = '#ffd700' }) {
+  return (
+    <mesh rotation={[Math.PI / 2, 0, 0]}>
+      <cylinderGeometry args={[0.4, 0.4, 0.1, 32]} />
+      <meshStandardMaterial
+        color={color}
+        metalness={0.8}
+        roughness={0.2}
+        emissive={color}
+        emissiveIntensity={0.2}
+      />
+    </mesh>
+  )
+}
+
+// ============================================
+// GLB COIN MODELS - Each loads one specific model
+// useGLTF is at TOP LEVEL - unconditional!
+// ============================================
+function SilverCoinModel({ scale }) {
+  const { scene } = useGLTF('/models/silver_coin.glb')
+  const cloned = useMemo(() => scene.clone(), [scene])
+  return <primitive object={cloned} scale={scale} />
+}
+
+function GoldCoinModel({ scale }) {
+  const { scene } = useGLTF('/models/gold_coin.glb')
+  const cloned = useMemo(() => scene.clone(), [scene])
+  return <primitive object={cloned} scale={scale} />
+}
+
+function PlatinumCoinModel({ scale }) {
+  const { scene } = useGLTF('/models/vcoin.glb')
+  const cloned = useMemo(() => scene.clone(), [scene])
+  return <primitive object={cloned} scale={scale} />
+}
+
+// ============================================
+// COIN CONFIGURATIONS
+// ============================================
 const COIN_CONFIG = {
-  100: { model: '/models/silver_coin.glb', scale: 0.6, name: 'Bronze', color: '#cd7f32' },
-  250: { model: '/models/silver_coin.glb', scale: 0.7, name: 'Silver', color: '#c0c0c0' },
-  500: { model: '/models/gold_coin.glb', scale: 0.7, name: 'Gold', color: '#ffd700' },
-  1000: { model: '/models/vcoin.glb', scale: 0.5, name: 'Platinum', color: '#e5e4e2' }
+  100: { name: 'Bronze', color: '#cd7f32', scale: 0.5, Model: SilverCoinModel },
+  250: { name: 'Silver', color: '#c0c0c0', scale: 0.6, Model: SilverCoinModel },
+  500: { name: 'Gold', color: '#ffd700', scale: 0.6, Model: GoldCoinModel },
+  1000: { name: 'Platinum', color: '#e5e4e2', scale: 0.4, Model: PlatinumCoinModel }
 }
 
-// Simple fallback coin (no GLB loading)
-function FallbackCoin({ id, x, z, value, color }) {
+// ============================================
+// ANIMATED COIN WRAPPER - Handles spin & float
+// ============================================
+function AnimatedCoinWrapper({ children, id }) {
   const groupRef = useRef()
-  const glowRef = useRef()
 
   useFrame((state) => {
     if (groupRef.current) {
+      // Spin
       groupRef.current.rotation.y += 0.05
+      // Float up and down
       groupRef.current.position.y = 1.5 + Math.sin(state.clock.elapsedTime * 2 + id) * 0.2
     }
+  })
+
+  return (
+    <group ref={groupRef} position={[0, 1.5, 0]}>
+      {children}
+    </group>
+  )
+}
+
+// ============================================
+// GROUND GLOW - Circle under coin
+// ============================================
+function GroundGlow({ color }) {
+  const glowRef = useRef()
+
+  useFrame((state) => {
     if (glowRef.current) {
-      const pulse = 0.4 + Math.sin(state.clock.elapsedTime * 3) * 0.2
+      const pulse = 0.3 + Math.sin(state.clock.elapsedTime * 3) * 0.15
       glowRef.current.material.opacity = pulse
     }
   })
 
   return (
-    <group position={[x, 0, z]}>
-      {/* Glow on ground */}
-      <mesh ref={glowRef} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.05, 0]}>
-        <circleGeometry args={[1, 32]} />
-        <meshBasicMaterial color={color} transparent opacity={0.4} />
-      </mesh>
-
-      {/* Simple cylinder coin */}
-      <group ref={groupRef} position={[0, 1.5, 0]}>
-        <mesh rotation={[Math.PI / 2, 0, 0]}>
-          <cylinderGeometry args={[0.4, 0.4, 0.1, 32]} />
-          <meshStandardMaterial 
-            color={color} 
-            metalness={0.8} 
-            roughness={0.2}
-            emissive={color}
-            emissiveIntensity={0.3}
-          />
-        </mesh>
-      </group>
-
-      {/* Light beam */}
-      <mesh position={[0, 1, 0]}>
-        <cylinderGeometry args={[0.05, 0.05, 2, 8]} />
-        <meshBasicMaterial color={color} transparent opacity={0.3} />
-      </mesh>
-    </group>
+    <mesh ref={glowRef} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.05, 0]}>
+      <circleGeometry args={[0.8, 32]} />
+      <meshBasicMaterial color={color} transparent opacity={0.3} />
+    </mesh>
   )
 }
 
-// GLB coin component - only called inside Suspense
-function GLBCoin({ id, x, z, value, config }) {
-  const groupRef = useRef()
-  const glowRef = useRef()
-
-  // Load the GLB model - this is safe because we're inside Suspense
-  const { scene } = useGLTF(config.model)
-  const coinModel = useMemo(() => scene.clone(), [scene])
-
-  useFrame((state) => {
-    if (groupRef.current) {
-      groupRef.current.rotation.y += 0.05
-      groupRef.current.position.y = 1.5 + Math.sin(state.clock.elapsedTime * 2 + id) * 0.2
-    }
-    if (glowRef.current) {
-      const pulse = 0.4 + Math.sin(state.clock.elapsedTime * 3) * 0.2
-      glowRef.current.material.opacity = pulse
-    }
-  })
-
-  return (
-    <group position={[x, 0, z]}>
-      {/* Glow on ground */}
-      <mesh ref={glowRef} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.05, 0]}>
-        <circleGeometry args={[1, 32]} />
-        <meshBasicMaterial color={config.color} transparent opacity={0.4} />
-      </mesh>
-
-      {/* GLB coin model */}
-      <group ref={groupRef} position={[0, 1.5, 0]}>
-        <primitive object={coinModel} scale={config.scale} />
-      </group>
-
-      {/* Light beam */}
-      <mesh position={[0, 1, 0]}>
-        <cylinderGeometry args={[0.05, 0.05, 2, 8]} />
-        <meshBasicMaterial color={config.color} transparent opacity={0.3} />
-      </mesh>
-    </group>
-  )
-}
-
-// Main Coin component with error boundary fallback
+// ============================================
+// MAIN COIN COMPONENT
+// ============================================
 export function Coin({ id, x, z, value, collected }) {
+  // Don't render if collected
   if (collected) return null
 
+  // Get config for this coin value
   const config = COIN_CONFIG[value] || COIN_CONFIG[100]
+  const { color, scale, Model } = config
 
-  // Use simple fallback coins to avoid GLB loading issues
-  return <FallbackCoin id={id} x={x} z={z} value={value} color={config.color} />
+  return (
+    <group position={[x, 0, z]}>
+      {/* Ground glow - always renders */}
+      <GroundGlow color={color} />
+
+      {/* Animated coin with GLB model */}
+      <AnimatedCoinWrapper id={id}>
+        <ErrorBoundary fallback={<FallbackCoin color={color} />}>
+          <Suspense fallback={<FallbackCoin color={color} />}>
+            <Model scale={scale} />
+          </Suspense>
+        </ErrorBoundary>
+      </AnimatedCoinWrapper>
+    </group>
+  )
 }
 
-// Component to render all coins
+// ============================================
+// COINS CONTAINER - Renders all coins from store
+// ============================================
 export function Coins() {
-  const coins = useGameStore(state => state.coins)
+  const coins = useGameStore((state) => state.coins)
+
+  if (!coins || coins.length === 0) {
+    return null
+  }
 
   return (
     <>
-      {coins.map(coin => (
+      {coins.map((coin) => (
         <Coin key={coin.id} {...coin} />
       ))}
     </>
