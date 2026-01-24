@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useRef } from 'react'
+import { useState, useMemo, useEffect, useRef, Suspense } from 'react'
 import { Canvas } from '@react-three/fiber'
 import { Sky } from '@react-three/drei'
 import { Player } from './Player'
@@ -19,6 +19,17 @@ import { SoundManager } from '../utils/SoundManager'
 const MAZE_WIDTH = 21  // Must be odd
 const MAZE_HEIGHT = 21 // Must be odd
 const CELL_SIZE = 2
+
+
+// Loading fallback for 3D models
+function LoadingFallback() {
+  return (
+    <mesh position={[0, 1, 0]}>
+      <boxGeometry args={[1, 1, 1]} />
+      <meshStandardMaterial color="#ff6600" />
+    </mesh>
+  )
+}
 
 function Ground() {
   return (
@@ -137,7 +148,7 @@ export function Game() {
         )}
 
         {gameState === 'playing' && (
-          <>
+          <Suspense fallback={<LoadingFallback />}>
             <Player
               mazeData={mazeData}
               walls={walls}
@@ -149,7 +160,7 @@ export function Game() {
               walls={walls}
               onCatchPlayer={handleGhostCatch}
             />
-          </>
+          </Suspense>
         )}
       </Canvas>
 
