@@ -167,7 +167,7 @@ export function AnimatedPanda({ isMoving, hasWon, scale = 0.025 }) {
       caughtTimeRef.current += delta
       
       // Float up smoothly for 9 seconds
-      if (caughtTimeRef.current < 9) {
+      if (caughtTimeRef.current < 16) {
         // Float up at a steady rate
         groupRef.current.position.y += delta * 1.5
         // Gentle rotation
