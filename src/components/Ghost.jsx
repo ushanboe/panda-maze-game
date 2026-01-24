@@ -64,7 +64,7 @@ function findPath(grid, startGrid, endGrid) {
       const nz = current.z + dir.dz
       const key = `${nx},${nz}`
 
-      if (nx >= 0 && nx < cols && nz >= 0 && nz < rows && 
+      if (nx >= 0 && nx < cols && nz >= 0 && nz < rows &&
           !visited.has(key) && grid[nz] && grid[nz][nx] === 0) {
         visited.add(key)
         queue.push({
@@ -88,15 +88,15 @@ export function Ghost({ mazeData, walls, onCatchPlayer }) {
   const [path, setPath] = useState([]) // Path in grid coordinates
   const [opacity, setOpacity] = useState(0)
   const [initialized, setInitialized] = useState(false)
+  const [hasCaught, setHasCaught] = useState(false)
 
   // Get player position and game state from store
   const playerPosition = useGameStore(state => state.playerPosition)
   const gameState = useGameStore(state => state.gameState)
   const playerCaught = useGameStore(state => state.playerCaught)
-  const setPlayerCaught = useGameStore(state => state.setPlayerCaught)
 
   const GHOST_SPEED = 2.5
-  const CATCH_DISTANCE = 0.8
+  const CATCH_DISTANCE = 1.5 // Increased for larger models
 
   // Initialize ghost position (opposite corner from player start)
   useEffect(() => {
@@ -116,7 +116,7 @@ export function Ghost({ mazeData, walls, onCatchPlayer }) {
           for (let dx = 0; dx < 5; dx++) {
             const testX = startGridX - dx
             const testZ = startGridZ - dz
-            if (testX > 0 && testZ > 0 && 
+            if (testX > 0 && testZ > 0 &&
                 mazeData.grid[testZ] && mazeData.grid[testZ][testX] === 0) {
               validX = testX
               validZ = testZ
@@ -129,6 +129,7 @@ export function Ghost({ mazeData, walls, onCatchPlayer }) {
       const worldPos = gridToWorld(validX, validZ, mazeData)
       setGhostWorldPos(worldPos)
       setInitialized(true)
+      setHasCaught(false)
     }
   }, [mazeData, initialized])
 
@@ -210,35 +211,40 @@ export function Ghost({ mazeData, walls, onCatchPlayer }) {
     }
 
     // Check if caught player
-    if (playerPosition) {
+    if (playerPosition && !hasCaught) {
       const distToPlayer = Math.sqrt(
         Math.pow(ghostWorldPos.x - playerPosition.x, 2) +
         Math.pow(ghostWorldPos.z - playerPosition.z, 2)
       )
 
       if (distToPlayer < CATCH_DISTANCE) {
-        setPlayerCaught(true)
-        if (onCatchPlayer) onCatchPlayer()
+        setHasCaught(true)
+        if (onCatchPlayer) {
+          onCatchPlayer()
+        }
       }
     }
 
     // Update position and floating animation
     groupRef.current.position.x = ghostWorldPos.x
     groupRef.current.position.z = ghostWorldPos.z
-    groupRef.current.position.y = 0.5 + Math.sin(state.clock.elapsedTime * 2) * 0.2
+    groupRef.current.position.y = 1.5 + Math.sin(state.clock.elapsedTime * 2) * 0.3
   })
 
   // Don't render until initialized
   if (!initialized) return null
 
+  // Scale factor - 3x bigger than before
+  const s = 3
+
   return (
-    <group ref={groupRef} position={[ghostWorldPos.x, 0.5, ghostWorldPos.z]}>
+    <group ref={groupRef} position={[ghostWorldPos.x, 1.5, ghostWorldPos.z]} scale={[s, s, s]}>
       {/* Ghost body - translucent capsule */}
       <mesh castShadow>
         <capsuleGeometry args={[0.3, 0.6, 8, 16]} />
-        <meshStandardMaterial 
-          color="#8844ff" 
-          transparent 
+        <meshStandardMaterial
+          color="#8844ff"
+          transparent
           opacity={opacity}
           emissive="#4422aa"
           emissiveIntensity={0.5}
@@ -247,9 +253,9 @@ export function Ghost({ mazeData, walls, onCatchPlayer }) {
       {/* Wavy bottom */}
       <mesh position={[0, -0.4, 0]}>
         <coneGeometry args={[0.35, 0.3, 8]} />
-        <meshStandardMaterial 
-          color="#8844ff" 
-          transparent 
+        <meshStandardMaterial
+          color="#8844ff"
+          transparent
           opacity={opacity}
           emissive="#4422aa"
           emissiveIntensity={0.5}
@@ -274,7 +280,7 @@ export function Ghost({ mazeData, walls, onCatchPlayer }) {
         <meshStandardMaterial color="#000000" />
       </mesh>
       {/* Glow effect */}
-      <pointLight color="#8844ff" intensity={0.8} distance={4} />
+      <pointLight color="#8844ff" intensity={0.8} distance={6} />
     </group>
   )
 }

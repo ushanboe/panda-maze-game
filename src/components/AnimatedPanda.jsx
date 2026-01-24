@@ -11,7 +11,7 @@ export function AnimatedPanda({ isMoving, hasWon, scale = 0.007 }) {
 
     // Bobbing animation when moving
     if (isMoving && !hasWon && !playerCaught) {
-      groupRef.current.position.y = Math.abs(Math.sin(state.clock.elapsedTime * 10)) * 0.1
+      groupRef.current.position.y = Math.abs(Math.sin(state.clock.elapsedTime * 10)) * 0.15
     } else if (!hasWon && !playerCaught) {
       groupRef.current.position.y = 0
     }
@@ -19,7 +19,7 @@ export function AnimatedPanda({ isMoving, hasWon, scale = 0.007 }) {
     // Win celebration
     if (hasWon) {
       groupRef.current.rotation.y += delta * 5
-      groupRef.current.position.y = Math.abs(Math.sin(state.clock.elapsedTime * 8)) * 0.3
+      groupRef.current.position.y = Math.abs(Math.sin(state.clock.elapsedTime * 8)) * 0.5
     }
 
     // Caught animation
@@ -33,8 +33,11 @@ export function AnimatedPanda({ isMoving, hasWon, scale = 0.007 }) {
     }
   })
 
+  // Scale factor - 3x bigger than before
+  const s = 3
+
   return (
-    <group ref={groupRef}>
+    <group ref={groupRef} scale={[s, s, s]}>
       {/* Body */}
       <mesh position={[0, 0.5, 0]} castShadow>
         <sphereGeometry args={[0.4, 16, 16]} />
