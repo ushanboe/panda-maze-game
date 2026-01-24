@@ -1,5 +1,5 @@
 
-import { useRef, useState, useEffect, useMemo } from 'react'
+import { useRef, useEffect } from 'react'
 import { useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
 import { useGameStore } from '../stores/gameStore'
@@ -14,55 +14,74 @@ const PATH_UPDATE_INTERVAL = 0.5 // Recalculate path every 0.5 seconds
 // BFS PATHFINDING - Find shortest path through maze
 // ============================================
 function findPath(grid, startGrid, endGrid, width, height) {
-  if (!grid || !startGrid || !endGrid) return []
+  if (!grid || !startGrid || !endGrid) return null
 
-  const start = { x: Math.round(startGrid.x), y: Math.round(startGrid.y) }
-  const end = { x: Math.round(endGrid.x), y: Math.round(endGrid.y) }
+  const startX = Math.round(startGrid.x)
+  const startY = Math.round(startGrid.y)
+  const endX = Math.round(endGrid.x)
+  const endY = Math.round(endGrid.y)
 
   // Bounds check
-  if (start.x < 0 || start.x >= width || start.y < 0 || start.y >= height) return []
-  if (end.x < 0 || end.x >= width || end.y < 0 || end.y >= height) return []
+  if (startX < 0 || startX >= width || startY < 0 || startY >= height) return null
+  if (endX < 0 || endX >= width || endY < 0 || endY >= height) return null
 
-  // BFS
-  const queue = [{ ...start, path: [start] }]
-  const visited = new Set()
-  visited.add(`${start.x},${start.y}`)
+  // BFS with optimized memory usage
+  const queue = []
+  const visited = new Array(height)
+  const parent = new Array(height)
+
+  for (let i = 0; i < height; i++) {
+    visited[i] = new Array(width).fill(false)
+    parent[i] = new Array(width).fill(null)
+  }
+
+  queue.push({ x: startX, y: startY })
+  visited[startY][startX] = true
 
   const directions = [
-    { x: 0, y: -1 }, // up
-    { x: 1, y: 0 },  // right
-    { x: 0, y: 1 },  // down
-    { x: -1, y: 0 }  // left
+    { x: 0, y: -1 },
+    { x: 1, y: 0 },
+    { x: 0, y: 1 },
+    { x: -1, y: 0 }
   ]
 
+  let found = false
   while (queue.length > 0) {
     const current = queue.shift()
 
-    // Found the target
-    if (current.x === end.x && current.y === end.y) {
-      return current.path
+    if (current.x === endX && current.y === endY) {
+      found = true
+      break
     }
 
-    // Explore neighbors
     for (const dir of directions) {
       const nx = current.x + dir.x
       const ny = current.y + dir.y
-      const key = `${nx},${ny}`
 
-      // Check bounds and if walkable (0 = path)
       if (nx >= 0 && nx < width && ny >= 0 && ny < height &&
-          !visited.has(key) && grid[ny] && grid[ny][nx] === 0) {
-        visited.add(key)
-        queue.push({
-          x: nx,
-          y: ny,
-          path: [...current.path, { x: nx, y: ny }]
-        })
+          !visited[ny][nx] && grid[ny] && grid[ny][nx] === 0) {
+        visited[ny][nx] = true
+        parent[ny][nx] = { x: current.x, y: current.y }
+        queue.push({ x: nx, y: ny })
       }
     }
   }
 
-  return [] // No path found
+  if (!found) return null
+
+  // Reconstruct path
+  const path = []
+  let cx = endX, cy = endY
+  while (cx !== startX || cy !== startY) {
+    path.unshift({ x: cx, y: cy })
+    const p = parent[cy][cx]
+    if (!p) break
+    cx = p.x
+    cy = p.y
+  }
+  path.unshift({ x: startX, y: startY })
+
+  return path
 }
 
 // Convert world position to grid position
@@ -77,7 +96,7 @@ function worldToGrid(worldX, worldZ, mazeData) {
 }
 
 // Convert grid position to world position
-function gridToWorld(gridX, gridY, mazeData) {
+function gridToWorldPos(gridX, gridY, mazeData) {
   const offsetX = -(mazeData.width * CELL_SIZE) / 2
   const offsetZ = -(mazeData.height * CELL_SIZE) / 2
 
@@ -88,51 +107,76 @@ function gridToWorld(gridX, gridY, mazeData) {
 }
 
 // ============================================
-// CHASING BALL COMPONENT
+// CHASING BALL COMPONENT - OPTIMIZED
 // ============================================
 export function ChasingBall({ mazeData }) {
   const groupRef = useRef()
   const ballRef = useRef()
   const glowRef = useRef()
 
-  const gameState = useGameStore((state) => state.gameState)
-  const playerPosition = useGameStore((state) => state.playerPosition)
+  // Use refs instead of state for performance
+  const positionRef = useRef({ x: 0, z: 0 })
+  const pathRef = useRef(null)
+  const pathIndexRef = useRef(0)
+  const lastPathUpdateRef = useRef(0)
+  const initializedRef = useRef(false)
+  const isActiveRef = useRef(false)
+
+  // Get loseGame function once (stable reference)
   const loseGame = useGameStore((state) => state.loseGame)
 
-  // Ball state
-  const [position, setPosition] = useState({ x: 0, z: 0 })
-  const [path, setPath] = useState([])
-  const [pathIndex, setPathIndex] = useState(0)
-  const lastPathUpdate = useRef(0)
-  const initialized = useRef(false)
-
-  // Initialize ball position at exit
+  // Initialize ball position at exit when game starts
   useEffect(() => {
-    if (mazeData && mazeData.exit && gameState === 'playing' && !initialized.current) {
-      const exitWorld = gridToWorld(mazeData.exit.x, mazeData.exit.y, mazeData)
-      setPosition({ x: exitWorld.x, z: exitWorld.z })
-      setPath([])
-      setPathIndex(0)
-      initialized.current = true
-    }
+    const unsubscribe = useGameStore.subscribe((state) => {
+      if (state.gameState === 'playing' && mazeData && mazeData.exit && !initializedRef.current) {
+        const exitWorld = gridToWorldPos(mazeData.exit.x, mazeData.exit.y, mazeData)
+        positionRef.current = { x: exitWorld.x, z: exitWorld.z }
+        pathRef.current = null
+        pathIndexRef.current = 0
+        lastPathUpdateRef.current = 0
+        initializedRef.current = true
+        isActiveRef.current = true
 
-    if (gameState === 'menu') {
-      initialized.current = false
-    }
-  }, [mazeData, gameState])
+        // Update visual position immediately
+        if (groupRef.current) {
+          groupRef.current.position.x = exitWorld.x
+          groupRef.current.position.z = exitWorld.z
+          groupRef.current.visible = true
+        }
+      }
 
-  // Main update loop
+      if (state.gameState === 'menu' || state.gameState === 'won' || state.gameState === 'lost') {
+        initializedRef.current = false
+        isActiveRef.current = false
+        if (groupRef.current) {
+          groupRef.current.visible = false
+        }
+      }
+    })
+
+    return () => unsubscribe()
+  }, [mazeData])
+
+  // Main update loop - no state updates, direct manipulation
   useFrame((state, delta) => {
-    if (gameState !== 'playing' || !mazeData || !groupRef.current) return
+    if (!isActiveRef.current || !mazeData || !groupRef.current) return
+
+    // Check game state without subscribing
+    const currentGameState = useGameStore.getState().gameState
+    if (currentGameState !== 'playing') return
 
     const time = state.clock.elapsedTime
+    const pos = positionRef.current
 
     // Update path periodically
-    if (time - lastPathUpdate.current > PATH_UPDATE_INTERVAL) {
-      lastPathUpdate.current = time
+    if (time - lastPathUpdateRef.current > PATH_UPDATE_INTERVAL) {
+      lastPathUpdateRef.current = time
 
-      const ballGrid = worldToGrid(position.x, position.z, mazeData)
-      const playerGrid = worldToGrid(playerPosition.x, playerPosition.z, mazeData)
+      // Get player position without subscription
+      const playerPos = useGameStore.getState().playerPosition
+
+      const ballGrid = worldToGrid(pos.x, pos.z, mazeData)
+      const playerGrid = worldToGrid(playerPos.x, playerPos.z, mazeData)
 
       const newPath = findPath(
         mazeData.grid,
@@ -142,72 +186,70 @@ export function ChasingBall({ mazeData }) {
         mazeData.height
       )
 
-      if (newPath.length > 1) {
-        setPath(newPath)
-        setPathIndex(1) // Start from index 1 (skip current position)
+      if (newPath && newPath.length > 1) {
+        pathRef.current = newPath
+        pathIndexRef.current = 1
       }
     }
 
     // Move along path
-    if (path.length > 0 && pathIndex < path.length) {
-      const targetGrid = path[pathIndex]
-      const targetWorld = gridToWorld(targetGrid.x, targetGrid.y, mazeData)
+    const path = pathRef.current
+    const pathIndex = pathIndexRef.current
 
-      const dx = targetWorld.x - position.x
-      const dz = targetWorld.z - position.z
+    if (path && pathIndex < path.length) {
+      const targetGrid = path[pathIndex]
+      const targetWorld = gridToWorldPos(targetGrid.x, targetGrid.y, mazeData)
+
+      const dx = targetWorld.x - pos.x
+      const dz = targetWorld.z - pos.z
       const dist = Math.sqrt(dx * dx + dz * dz)
 
       if (dist < 0.2) {
         // Reached waypoint, move to next
-        setPathIndex(pathIndex + 1)
+        pathIndexRef.current = pathIndex + 1
       } else {
         // Move toward waypoint
         const moveSpeed = BALL_SPEED * delta
-        const moveX = (dx / dist) * Math.min(moveSpeed, dist)
-        const moveZ = (dz / dist) * Math.min(moveSpeed, dist)
-
-        setPosition(prev => ({
-          x: prev.x + moveX,
-          z: prev.z + moveZ
-        }))
+        const moveAmount = Math.min(moveSpeed, dist)
+        pos.x += (dx / dist) * moveAmount
+        pos.z += (dz / dist) * moveAmount
       }
     }
 
-    // Update visual position
-    groupRef.current.position.x = position.x
-    groupRef.current.position.z = position.z
+    // Update visual position directly
+    groupRef.current.position.x = pos.x
+    groupRef.current.position.z = pos.z
 
-    // Animate ball
+    // Animate ball rotation
     if (ballRef.current) {
       ballRef.current.rotation.x += delta * 3
       ballRef.current.rotation.z += delta * 2
     }
 
     // Pulse glow
-    if (glowRef.current) {
-      const pulse = 0.4 + Math.sin(time * 4) * 0.2
+    if (glowRef.current && glowRef.current.material) {
+      const pulse = 0.3 + Math.sin(time * 4) * 0.15
       glowRef.current.material.opacity = pulse
     }
 
     // Check collision with player
-    const playerDx = playerPosition.x - position.x
-    const playerDz = playerPosition.z - position.z
+    const playerPos = useGameStore.getState().playerPosition
+    const playerDx = playerPos.x - pos.x
+    const playerDz = playerPos.z - pos.z
     const playerDist = Math.sqrt(playerDx * playerDx + playerDz * playerDz)
 
     if (playerDist < CATCH_DISTANCE) {
       // Caught the panda!
+      isActiveRef.current = false
       loseGame()
     }
   })
 
-  // Don't render if not playing
-  if (gameState !== 'playing') return null
-
   return (
-    <group ref={groupRef} position={[position.x, BALL_RADIUS, position.z]}>
+    <group ref={groupRef} position={[0, BALL_RADIUS, 0]} visible={false}>
       {/* Main ball - translucent blue */}
       <mesh ref={ballRef} castShadow>
-        <sphereGeometry args={[BALL_RADIUS, 32, 32]} />
+        <sphereGeometry args={[BALL_RADIUS, 24, 24]} />
         <meshStandardMaterial
           color="#0088ff"
           transparent
@@ -221,7 +263,7 @@ export function ChasingBall({ mazeData }) {
 
       {/* Inner glow core */}
       <mesh>
-        <sphereGeometry args={[BALL_RADIUS * 0.6, 16, 16]} />
+        <sphereGeometry args={[BALL_RADIUS * 0.6, 12, 12]} />
         <meshBasicMaterial
           color="#00aaff"
           transparent
@@ -231,7 +273,7 @@ export function ChasingBall({ mazeData }) {
 
       {/* Outer glow */}
       <mesh ref={glowRef}>
-        <sphereGeometry args={[BALL_RADIUS * 1.3, 16, 16]} />
+        <sphereGeometry args={[BALL_RADIUS * 1.3, 12, 12]} />
         <meshBasicMaterial
           color="#0066ff"
           transparent
@@ -242,7 +284,7 @@ export function ChasingBall({ mazeData }) {
 
       {/* Ground shadow/glow */}
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -BALL_RADIUS + 0.05, 0]}>
-        <circleGeometry args={[BALL_RADIUS * 1.5, 32]} />
+        <circleGeometry args={[BALL_RADIUS * 1.5, 24]} />
         <meshBasicMaterial
           color="#0066ff"
           transparent
