@@ -3,7 +3,7 @@ import { useRef, useEffect, useMemo, useState } from 'react'
 import { useFrame } from '@react-three/fiber'
 import { useFBX } from '@react-three/drei'
 import * as THREE from 'three'
-import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js'
+import { clone as cloneSkeleton } from 'three/examples/jsm/utils/SkeletonUtils.js'
 import { useGameStore } from '../stores/gameStore'
 
 // Fix Mixamo bone names - remove colons from track names
@@ -33,7 +33,7 @@ export function AnimatedPanda({ isMoving, hasWon, scale = 0.007 }) {
   // Clone the model to avoid sharing skeleton issues
   const clonedModel = useMemo(() => {
     if (!idleFbx) return null
-    const clone = SkeletonUtils.clone(idleFbx)
+    const clone = cloneSkeleton(idleFbx)
 
     // Fix bone names in the cloned model
     clone.traverse((child) => {
