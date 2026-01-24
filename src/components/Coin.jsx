@@ -30,33 +30,64 @@ function FallbackCoin({ color = '#ffd700' }) {
 // ============================================
 // GLB COIN MODELS - Each loads one specific model
 // useGLTF is at TOP LEVEL - unconditional!
+// Added rotation to orient coins properly (they're flat on XY plane in GLB)
 // ============================================
 function SilverCoinModel({ scale }) {
   const { scene } = useGLTF('/models/silver_coin.glb')
-  const cloned = useMemo(() => scene.clone(), [scene])
-  return <primitive object={cloned} scale={scale} />
+  const cloned = useMemo(() => {
+    const clone = scene.clone()
+    // Traverse and ensure materials are properly set up
+    clone.traverse((child) => {
+      if (child.isMesh) {
+        child.castShadow = true
+        child.receiveShadow = true
+      }
+    })
+    return clone
+  }, [scene])
+  // Rotate 90 degrees on X to stand the coin up (it's flat in the GLB)
+  return <primitive object={cloned} scale={scale} rotation={[Math.PI / 2, 0, 0]} />
 }
 
 function GoldCoinModel({ scale }) {
   const { scene } = useGLTF('/models/gold_coin.glb')
-  const cloned = useMemo(() => scene.clone(), [scene])
-  return <primitive object={cloned} scale={scale} />
+  const cloned = useMemo(() => {
+    const clone = scene.clone()
+    clone.traverse((child) => {
+      if (child.isMesh) {
+        child.castShadow = true
+        child.receiveShadow = true
+      }
+    })
+    return clone
+  }, [scene])
+  return <primitive object={cloned} scale={scale} rotation={[Math.PI / 2, 0, 0]} />
 }
 
 function PlatinumCoinModel({ scale }) {
   const { scene } = useGLTF('/models/vcoin.glb')
-  const cloned = useMemo(() => scene.clone(), [scene])
-  return <primitive object={cloned} scale={scale} />
+  const cloned = useMemo(() => {
+    const clone = scene.clone()
+    clone.traverse((child) => {
+      if (child.isMesh) {
+        child.castShadow = true
+        child.receiveShadow = true
+      }
+    })
+    return clone
+  }, [scene])
+  return <primitive object={cloned} scale={scale} rotation={[Math.PI / 2, 0, 0]} />
 }
 
 // ============================================
 // COIN CONFIGURATIONS
+// Increased scales since GLB models are ~2.3 units diameter
 // ============================================
 const COIN_CONFIG = {
-  100: { name: 'Bronze', color: '#cd7f32', scale: 0.5, Model: SilverCoinModel },
-  250: { name: 'Silver', color: '#c0c0c0', scale: 0.6, Model: SilverCoinModel },
-  500: { name: 'Gold', color: '#ffd700', scale: 0.6, Model: GoldCoinModel },
-  1000: { name: 'Platinum', color: '#e5e4e2', scale: 0.4, Model: PlatinumCoinModel }
+  100: { name: 'Bronze', color: '#cd7f32', scale: 0.3, Model: SilverCoinModel },
+  250: { name: 'Silver', color: '#c0c0c0', scale: 0.35, Model: SilverCoinModel },
+  500: { name: 'Gold', color: '#ffd700', scale: 0.35, Model: GoldCoinModel },
+  1000: { name: 'Platinum', color: '#e5e4e2', scale: 0.25, Model: PlatinumCoinModel }
 }
 
 // ============================================

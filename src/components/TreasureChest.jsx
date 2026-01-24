@@ -45,11 +45,24 @@ function FallbackChest({ color = '#8B4513', scale = 1 }) {
 // ============================================
 // GLB CHEST MODEL - Loads the actual model
 // useGLTF is at TOP LEVEL - unconditional!
+// Model is ~4.2 units wide, ~3.77 units tall
 // ============================================
 function ChestModel({ scale }) {
   const { scene } = useGLTF('/models/treasure_chest.glb')
-  const cloned = useMemo(() => scene.clone(), [scene])
-  return <primitive object={cloned} scale={scale} />
+  const cloned = useMemo(() => {
+    const clone = scene.clone()
+    // Traverse and ensure materials are properly set up
+    clone.traverse((child) => {
+      if (child.isMesh) {
+        child.castShadow = true
+        child.receiveShadow = true
+      }
+    })
+    return clone
+  }, [scene])
+  // Model is already oriented correctly, just scale it down
+  // Offset Y slightly to account for model origin
+  return <primitive object={cloned} scale={scale} position={[0, -0.05, 0]} />
 }
 
 // ============================================
@@ -108,14 +121,14 @@ function AnimatedChestWrapper({ children }) {
   useFrame((state) => {
     if (groupRef.current) {
       // Float up and down
-      groupRef.current.position.y = 0.8 + Math.sin(state.clock.elapsedTime * 1.5) * 0.2
+      groupRef.current.position.y = 0.5 + Math.sin(state.clock.elapsedTime * 1.5) * 0.15
       // Gentle rotation
-      groupRef.current.rotation.y = Math.sin(state.clock.elapsedTime * 0.5) * 0.3
+      groupRef.current.rotation.y = Math.sin(state.clock.elapsedTime * 0.5) * 0.2
     }
   })
 
   return (
-    <group ref={groupRef} position={[0, 0.8, 0]}>
+    <group ref={groupRef} position={[0, 0.5, 0]}>
       {children}
     </group>
   )
@@ -145,9 +158,10 @@ export function TreasureChest({ type = '10K' }) {
   }
 
   // Configuration based on type
+  // Model is ~4.2 units wide, scale down to fit in maze cells
   const glowColor = type === '10K' ? '#ffd700' : '#ff00ff'
   const chestColor = type === '10K' ? '#8B4513' : '#4B0082'
-  const scale = type === '10K' ? 0.5 : 0.7
+  const scale = type === '10K' ? 0.25 : 0.35  // Adjusted for ~4.2 unit model
 
   return (
     <group position={[x, 0, z]}>
@@ -159,8 +173,8 @@ export function TreasureChest({ type = '10K' }) {
 
       {/* Animated chest with GLB model */}
       <AnimatedChestWrapper>
-        <ErrorBoundary fallback={<FallbackChest color={chestColor} scale={scale} />}>
-          <Suspense fallback={<FallbackChest color={chestColor} scale={scale} />}>
+        <ErrorBoundary fallback={<FallbackChest color={chestColor} scale={scale * 2} />}>
+          <Suspense fallback={<FallbackChest color={chestColor} scale={scale * 2} />}>
             <ChestModel scale={scale} />
           </Suspense>
         </ErrorBoundary>
