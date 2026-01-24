@@ -14,7 +14,7 @@ function fixMixamoBoneNames(clip) {
   return clip
 }
 
-export function AnimatedPanda({ isMoving, hasWon, scale = 0.02 }) {
+export function AnimatedPanda({ isMoving, hasWon, scale = 0.008 }) {
   const groupRef = useRef()
   const mixerRef = useRef(null)
   const actionsRef = useRef({})
