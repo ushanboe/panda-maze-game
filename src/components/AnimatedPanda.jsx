@@ -1,112 +1,184 @@
-import { useRef } from 'react'
+import { useRef, useEffect, useState, useMemo } from 'react'
 import { useFrame } from '@react-three/fiber'
+import { useFBX } from '@react-three/drei'
+import { AnimationMixer, LoopRepeat } from 'three'
 import { useGameStore } from '../stores/gameStore'
 
-export function AnimatedPanda({ isMoving, hasWon, scale = 0.007 }) {
+// Fix Mixamo bone names (remove namespace prefix)
+function fixMixamoBoneNames(clip) {
+  clip.tracks.forEach(track => {
+    track.name = track.name.replace(/^mixamorig:/, '')
+  })
+  return clip
+}
+
+// Clone skeleton properly
+function cloneWithSkeleton(source) {
+  const clone = source.clone(true)
+  
+  const sourceBones = {}
+  source.traverse(node => {
+    if (node.isBone) {
+      sourceBones[node.name] = node
+    }
+  })
+  
+  clone.traverse(node => {
+    if (node.isSkinnedMesh) {
+      const skeleton = node.skeleton
+      const newBones = []
+      
+      skeleton.bones.forEach(bone => {
+        const clonedBone = clone.getObjectByName(bone.name)
+        if (clonedBone) {
+          newBones.push(clonedBone)
+        }
+      })
+      
+      node.skeleton = skeleton.clone()
+      node.skeleton.bones = newBones
+      node.bind(node.skeleton, node.bindMatrix)
+    }
+    
+    if (node.isMesh) {
+      node.castShadow = true
+      node.receiveShadow = true
+    }
+  })
+  
+  return clone
+}
+
+export function AnimatedPanda({ isMoving, hasWon, scale = 0.025 }) {
   const groupRef = useRef()
+  const mixerRef = useRef(null)
+  const actionsRef = useRef({})
+  const [currentAction, setCurrentAction] = useState('idle')
+  const [winAnimStarted, setWinAnimStarted] = useState(false)
+  
   const playerCaught = useGameStore(state => state.playerCaught)
 
+  // Load FBX models
+  const idleFbx = useFBX('/models/Idle.fbx')
+  const walkFbx = useFBX('/models/Start_Walking.fbx')
+  const danceFbx = useFBX('/models/Hip_Hop_Dancing_2.fbx')
+
+  // Clone the model to avoid sharing issues
+  const model = useMemo(() => {
+    if (idleFbx) {
+      const cloned = cloneWithSkeleton(idleFbx)
+      return cloned
+    }
+    return null
+  }, [idleFbx])
+
+  // Setup animation mixer and actions
+  useEffect(() => {
+    if (!model || !idleFbx || !walkFbx || !danceFbx) return
+
+    const mixer = new AnimationMixer(model)
+    mixerRef.current = mixer
+
+    // Get animations from each FBX and fix bone names
+    const idleClip = idleFbx.animations[0] ? fixMixamoBoneNames(idleFbx.animations[0].clone()) : null
+    const walkClip = walkFbx.animations[0] ? fixMixamoBoneNames(walkFbx.animations[0].clone()) : null
+    const danceClip = danceFbx.animations[0] ? fixMixamoBoneNames(danceFbx.animations[0].clone()) : null
+
+    // Create actions
+    if (idleClip) {
+      const idleAction = mixer.clipAction(idleClip)
+      idleAction.setLoop(LoopRepeat)
+      actionsRef.current.idle = idleAction
+    }
+
+    if (walkClip) {
+      const walkAction = mixer.clipAction(walkClip)
+      walkAction.setLoop(LoopRepeat)
+      actionsRef.current.walk = walkAction
+    }
+
+    if (danceClip) {
+      const danceAction = mixer.clipAction(danceClip)
+      danceAction.setLoop(LoopRepeat)
+      actionsRef.current.dance = danceAction
+    }
+
+    // Start with idle
+    if (actionsRef.current.idle) {
+      actionsRef.current.idle.play()
+    }
+
+    return () => {
+      mixer.stopAllAction()
+      mixer.uncacheRoot(model)
+    }
+  }, [model, idleFbx, walkFbx, danceFbx])
+
+  // Handle animation transitions
+  useEffect(() => {
+    if (!mixerRef.current || !actionsRef.current) return
+
+    const actions = actionsRef.current
+    let targetAction = 'idle'
+
+    if (playerCaught) {
+      // Keep current animation when caught, we'll handle spinning separately
+      return
+    } else if (hasWon && !winAnimStarted) {
+      targetAction = 'dance'
+      setWinAnimStarted(true)
+    } else if (hasWon) {
+      targetAction = 'dance'
+    } else if (isMoving) {
+      targetAction = 'walk'
+    } else {
+      targetAction = 'idle'
+    }
+
+    if (targetAction !== currentAction && actions[targetAction]) {
+      // Fade out current action
+      if (actions[currentAction]) {
+        actions[currentAction].fadeOut(0.2)
+      }
+      // Fade in new action
+      actions[targetAction].reset().fadeIn(0.2).play()
+      setCurrentAction(targetAction)
+    }
+  }, [isMoving, hasWon, playerCaught, currentAction, winAnimStarted])
+
+  // Animation update loop
   useFrame((state, delta) => {
+    // Update animation mixer
+    if (mixerRef.current) {
+      mixerRef.current.update(delta)
+    }
+
     if (!groupRef.current) return
 
-    // Bobbing animation when moving
-    if (isMoving && !hasWon && !playerCaught) {
-      groupRef.current.position.y = Math.abs(Math.sin(state.clock.elapsedTime * 10)) * 0.15
-    } else if (!hasWon && !playerCaught) {
-      groupRef.current.position.y = 0
-    }
-
-    // Win celebration
-    if (hasWon) {
-      groupRef.current.rotation.y += delta * 5
-      groupRef.current.position.y = Math.abs(Math.sin(state.clock.elapsedTime * 8)) * 0.5
-    }
-
-    // Caught animation
+    // Caught animation - spin and shrink
     if (playerCaught) {
       groupRef.current.rotation.y += delta * 15
       const currentScale = groupRef.current.scale.x
-      if (currentScale > 0.01) {
+      if (currentScale > 0.001) {
         groupRef.current.scale.multiplyScalar(0.96)
       }
       groupRef.current.position.y += delta * 2
     }
   })
 
-  // Scale factor - 3x bigger than before
-  const s = 2.55
+  if (!model) {
+    // Fallback loading indicator
+    return (
+      <mesh>
+        <boxGeometry args={[0.5, 1, 0.5]} />
+        <meshStandardMaterial color="#ff6600" />
+      </mesh>
+    )
+  }
 
   return (
-    <group ref={groupRef} scale={[s, s, s]}>
-      {/* Body */}
-      <mesh position={[0, 0.5, 0]} castShadow>
-        <sphereGeometry args={[0.4, 16, 16]} />
-        <meshStandardMaterial color="#ffffff" />
-      </mesh>
-      {/* Head */}
-      <mesh position={[0, 1, 0]} castShadow>
-        <sphereGeometry args={[0.3, 16, 16]} />
-        <meshStandardMaterial color="#ffffff" />
-      </mesh>
-      {/* Ears */}
-      <mesh position={[-0.2, 1.25, 0]} castShadow>
-        <sphereGeometry args={[0.1, 8, 8]} />
-        <meshStandardMaterial color="#1a1a1a" />
-      </mesh>
-      <mesh position={[0.2, 1.25, 0]} castShadow>
-        <sphereGeometry args={[0.1, 8, 8]} />
-        <meshStandardMaterial color="#1a1a1a" />
-      </mesh>
-      {/* Eye patches (black) */}
-      <mesh position={[-0.12, 1.05, 0.2]} castShadow>
-        <sphereGeometry args={[0.12, 8, 8]} />
-        <meshStandardMaterial color="#1a1a1a" />
-      </mesh>
-      <mesh position={[0.12, 1.05, 0.2]} castShadow>
-        <sphereGeometry args={[0.12, 8, 8]} />
-        <meshStandardMaterial color="#1a1a1a" />
-      </mesh>
-      {/* Eyes (white) */}
-      <mesh position={[-0.1, 1.07, 0.28]} castShadow>
-        <sphereGeometry args={[0.05, 8, 8]} />
-        <meshStandardMaterial color="#ffffff" />
-      </mesh>
-      <mesh position={[0.1, 1.07, 0.28]} castShadow>
-        <sphereGeometry args={[0.05, 8, 8]} />
-        <meshStandardMaterial color="#ffffff" />
-      </mesh>
-      {/* Pupils */}
-      <mesh position={[-0.1, 1.07, 0.32]}>
-        <sphereGeometry args={[0.025, 8, 8]} />
-        <meshStandardMaterial color="#000000" />
-      </mesh>
-      <mesh position={[0.1, 1.07, 0.32]}>
-        <sphereGeometry args={[0.025, 8, 8]} />
-        <meshStandardMaterial color="#000000" />
-      </mesh>
-      {/* Nose */}
-      <mesh position={[0, 0.95, 0.28]} castShadow>
-        <sphereGeometry args={[0.05, 8, 8]} />
-        <meshStandardMaterial color="#1a1a1a" />
-      </mesh>
-      {/* Arms */}
-      <mesh position={[-0.45, 0.5, 0]} rotation={[0, 0, 0.3]} castShadow>
-        <capsuleGeometry args={[0.1, 0.3, 4, 8]} />
-        <meshStandardMaterial color="#1a1a1a" />
-      </mesh>
-      <mesh position={[0.45, 0.5, 0]} rotation={[0, 0, -0.3]} castShadow>
-        <capsuleGeometry args={[0.1, 0.3, 4, 8]} />
-        <meshStandardMaterial color="#1a1a1a" />
-      </mesh>
-      {/* Legs */}
-      <mesh position={[-0.2, 0.1, 0]} castShadow>
-        <capsuleGeometry args={[0.12, 0.2, 4, 8]} />
-        <meshStandardMaterial color="#1a1a1a" />
-      </mesh>
-      <mesh position={[0.2, 0.1, 0]} castShadow>
-        <capsuleGeometry args={[0.12, 0.2, 4, 8]} />
-        <meshStandardMaterial color="#1a1a1a" />
-      </mesh>
+    <group ref={groupRef} scale={[scale, scale, scale]}>
+      <primitive object={model} />
     </group>
   )
 }
