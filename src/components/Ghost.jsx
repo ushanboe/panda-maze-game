@@ -31,7 +31,6 @@ function findPath(grid, startGrid, endGrid) {
   const rows = grid.length
   const cols = grid[0].length
 
-  // Clamp to maze bounds
   const start = {
     x: Math.max(0, Math.min(cols - 1, startGrid.x)),
     z: Math.max(0, Math.min(rows - 1, startGrid.z))
@@ -46,10 +45,10 @@ function findPath(grid, startGrid, endGrid) {
   visited.add(`${start.x},${start.z}`)
 
   const directions = [
-    { dx: 0, dz: -1 }, // up
-    { dx: 0, dz: 1 },  // down
-    { dx: -1, dz: 0 }, // left
-    { dx: 1, dz: 0 }   // right
+    { dx: 0, dz: -1 },
+    { dx: 0, dz: 1 },
+    { dx: -1, dz: 0 },
+    { dx: 1, dz: 0 }
   ]
 
   while (queue.length > 0) {
@@ -76,42 +75,41 @@ function findPath(grid, startGrid, endGrid) {
     }
   }
 
-  return [] // No path found
+  return []
 }
 
 export function Ghost({ mazeData, walls, onCatchPlayer }) {
   const groupRef = useRef()
-
-  // Ghost state - stored in WORLD coordinates
-  const [ghostWorldPos, setGhostWorldPos] = useState({ x: 0, z: 0 })
-  const [targetWorldPos, setTargetWorldPos] = useState(null)
-  const [path, setPath] = useState([]) // Path in grid coordinates
-  const [opacity, setOpacity] = useState(0)
+  
+  // Use refs instead of state for position (avoids re-renders every frame)
+  const ghostPosRef = useRef({ x: 0, z: 0 })
+  const targetPosRef = useRef(null)
+  const pathRef = useRef([])
+  const opacityRef = useRef(0)
+  const hasCaughtRef = useRef(false)
+  
   const [initialized, setInitialized] = useState(false)
-  const [hasCaught, setHasCaught] = useState(false)
+  const [opacity, setOpacity] = useState(0) // Only for initial fade-in
 
-  // Get player position and game state from store
   const playerPosition = useGameStore(state => state.playerPosition)
   const gameState = useGameStore(state => state.gameState)
   const playerCaught = useGameStore(state => state.playerCaught)
 
   const GHOST_SPEED = 2.5
-  const CATCH_DISTANCE = 1.5 // Increased for larger models
+  const CATCH_DISTANCE = 1.5
+  const PATH_UPDATE_INTERVAL = 500 // ms
+  const lastPathUpdateRef = useRef(0)
 
-  // Initialize ghost position (opposite corner from player start)
+  // Initialize ghost position
   useEffect(() => {
     if (mazeData && mazeData.grid && mazeData.grid.length > 0 && !initialized) {
-      // Start ghost at opposite corner from player start
       const startGridX = mazeData.grid[0].length - 2
       const startGridZ = mazeData.grid.length - 2
 
-      // Make sure it's a valid path cell
       let validX = startGridX
       let validZ = startGridZ
 
-      // Find nearest valid cell if starting position is a wall
       if (mazeData.grid[validZ] && mazeData.grid[validZ][validX] === 1) {
-        // Search for nearby valid cell
         for (let dz = 0; dz < 5; dz++) {
           for (let dx = 0; dx < 5; dx++) {
             const testX = startGridX - dx
@@ -127,9 +125,9 @@ export function Ghost({ mazeData, walls, onCatchPlayer }) {
       }
 
       const worldPos = gridToWorld(validX, validZ, mazeData)
-      setGhostWorldPos(worldPos)
+      ghostPosRef.current = worldPos
       setInitialized(true)
-      setHasCaught(false)
+      hasCaughtRef.current = false
     }
   }, [mazeData, initialized])
 
@@ -138,108 +136,95 @@ export function Ghost({ mazeData, walls, onCatchPlayer }) {
     if (gameState === 'playing' && initialized) {
       const fadeIn = setInterval(() => {
         setOpacity(prev => {
-          if (prev >= 0.7) {
+          const newVal = prev + 0.05
+          opacityRef.current = Math.min(newVal, 0.7)
+          if (newVal >= 0.7) {
             clearInterval(fadeIn)
             return 0.7
           }
-          return prev + 0.05
+          return newVal
         })
       }, 100)
       return () => clearInterval(fadeIn)
     }
   }, [gameState, initialized])
 
-  // Pathfinding - update path periodically
-  useEffect(() => {
-    if (!mazeData || !mazeData.grid || !playerPosition || gameState !== 'playing' || playerCaught || !initialized) return
-
-    const updatePath = () => {
-      // Convert positions to grid coordinates
-      const ghostGrid = worldToGrid(ghostWorldPos.x, ghostWorldPos.z, mazeData)
-      const playerGrid = worldToGrid(playerPosition.x, playerPosition.z, mazeData)
-
-      const newPath = findPath(mazeData.grid, ghostGrid, playerGrid)
-      setPath(newPath)
-
-      if (newPath.length > 0) {
-        // Convert first path point to world coordinates
-        const targetWorld = gridToWorld(newPath[0].x, newPath[0].z, mazeData)
-        setTargetWorldPos(targetWorld)
-      }
-    }
-
-    updatePath()
-    const interval = setInterval(updatePath, 500) // Update path every 500ms
-
-    return () => clearInterval(interval)
-  }, [mazeData, playerPosition, ghostWorldPos, gameState, playerCaught, initialized])
-
-  // Movement and animation loop
+  // Movement and animation loop - optimized
   useFrame((state, delta) => {
     if (gameState !== 'playing' || playerCaught || !initialized) return
     if (!groupRef.current) return
 
+    const now = state.clock.elapsedTime * 1000
+    
+    // Update pathfinding less frequently (every 500ms instead of every frame)
+    if (now - lastPathUpdateRef.current > PATH_UPDATE_INTERVAL && playerPosition && mazeData) {
+      lastPathUpdateRef.current = now
+      
+      const ghostGrid = worldToGrid(ghostPosRef.current.x, ghostPosRef.current.z, mazeData)
+      const playerGrid = worldToGrid(playerPosition.x, playerPosition.z, mazeData)
+      
+      const newPath = findPath(mazeData.grid, ghostGrid, playerGrid)
+      pathRef.current = newPath
+      
+      if (newPath.length > 0) {
+        targetPosRef.current = gridToWorld(newPath[0].x, newPath[0].z, mazeData)
+      }
+    }
+
     // Move towards target
-    if (targetWorldPos) {
-      const dx = targetWorldPos.x - ghostWorldPos.x
-      const dz = targetWorldPos.z - ghostWorldPos.z
+    if (targetPosRef.current) {
+      const dx = targetPosRef.current.x - ghostPosRef.current.x
+      const dz = targetPosRef.current.z - ghostPosRef.current.z
       const dist = Math.sqrt(dx * dx + dz * dz)
 
       if (dist > 0.1) {
         const moveX = (dx / dist) * GHOST_SPEED * delta
         const moveZ = (dz / dist) * GHOST_SPEED * delta
 
-        setGhostWorldPos(prev => ({
-          x: prev.x + moveX,
-          z: prev.z + moveZ
-        }))
+        ghostPosRef.current.x += moveX
+        ghostPosRef.current.z += moveZ
 
         // Rotate to face movement direction
         const angle = Math.atan2(dx, dz)
         groupRef.current.rotation.y = angle
       } else {
         // Reached target, get next point in path
-        if (path.length > 1) {
-          const nextPath = path.slice(1)
-          setPath(nextPath)
-          if (nextPath.length > 0 && mazeData) {
-            const nextWorld = gridToWorld(nextPath[0].x, nextPath[0].z, mazeData)
-            setTargetWorldPos(nextWorld)
+        if (pathRef.current.length > 1) {
+          pathRef.current = pathRef.current.slice(1)
+          if (pathRef.current.length > 0 && mazeData) {
+            targetPosRef.current = gridToWorld(pathRef.current[0].x, pathRef.current[0].z, mazeData)
           }
         }
       }
     }
 
     // Check if caught player
-    if (playerPosition && !hasCaught) {
+    if (playerPosition && !hasCaughtRef.current) {
       const distToPlayer = Math.sqrt(
-        Math.pow(ghostWorldPos.x - playerPosition.x, 2) +
-        Math.pow(ghostWorldPos.z - playerPosition.z, 2)
+        Math.pow(ghostPosRef.current.x - playerPosition.x, 2) +
+        Math.pow(ghostPosRef.current.z - playerPosition.z, 2)
       )
 
       if (distToPlayer < CATCH_DISTANCE) {
-        setHasCaught(true)
+        hasCaughtRef.current = true
         if (onCatchPlayer) {
           onCatchPlayer()
         }
       }
     }
 
-    // Update position and floating animation
-    groupRef.current.position.x = ghostWorldPos.x
-    groupRef.current.position.z = ghostWorldPos.z
+    // Update visual position directly (no state updates)
+    groupRef.current.position.x = ghostPosRef.current.x
+    groupRef.current.position.z = ghostPosRef.current.z
     groupRef.current.position.y = 1.5 + Math.sin(state.clock.elapsedTime * 2) * 0.3
   })
 
-  // Don't render until initialized
   if (!initialized) return null
 
-  // Scale factor - 3x bigger than before
   const s = 2.55
 
   return (
-    <group ref={groupRef} position={[ghostWorldPos.x, 1.5, ghostWorldPos.z]} scale={[s, s, s]}>
-      {/* Ghost body - translucent capsule */}
+    <group ref={groupRef} position={[ghostPosRef.current.x, 1.5, ghostPosRef.current.z]} scale={[s, s, s]}>
       <mesh castShadow>
         <capsuleGeometry args={[0.3, 0.6, 8, 16]} />
         <meshStandardMaterial
@@ -250,7 +235,6 @@ export function Ghost({ mazeData, walls, onCatchPlayer }) {
           emissiveIntensity={0.5}
         />
       </mesh>
-      {/* Wavy bottom */}
       <mesh position={[0, -0.4, 0]}>
         <coneGeometry args={[0.35, 0.3, 8]} />
         <meshStandardMaterial
@@ -261,7 +245,6 @@ export function Ghost({ mazeData, walls, onCatchPlayer }) {
           emissiveIntensity={0.5}
         />
       </mesh>
-      {/* Eyes */}
       <mesh position={[-0.12, 0.15, 0.25]}>
         <sphereGeometry args={[0.1, 8, 8]} />
         <meshStandardMaterial color="#ffffff" emissive="#ffffff" emissiveIntensity={0.3} />
@@ -270,7 +253,6 @@ export function Ghost({ mazeData, walls, onCatchPlayer }) {
         <sphereGeometry args={[0.1, 8, 8]} />
         <meshStandardMaterial color="#ffffff" emissive="#ffffff" emissiveIntensity={0.3} />
       </mesh>
-      {/* Pupils */}
       <mesh position={[-0.12, 0.15, 0.34]}>
         <sphereGeometry args={[0.05, 8, 8]} />
         <meshStandardMaterial color="#000000" />
@@ -279,7 +261,6 @@ export function Ghost({ mazeData, walls, onCatchPlayer }) {
         <sphereGeometry args={[0.05, 8, 8]} />
         <meshStandardMaterial color="#000000" />
       </mesh>
-      {/* Glow effect */}
       <pointLight color="#8844ff" intensity={0.8} distance={6} />
     </group>
   )
