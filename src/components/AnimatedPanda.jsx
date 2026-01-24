@@ -16,13 +16,6 @@ function fixMixamoBoneNames(clip) {
 function cloneWithSkeleton(source) {
   const clone = source.clone(true)
   
-  const sourceBones = {}
-  source.traverse(node => {
-    if (node.isBone) {
-      sourceBones[node.name] = node
-    }
-  })
-  
   clone.traverse(node => {
     if (node.isSkinnedMesh) {
       const skeleton = node.skeleton
@@ -55,6 +48,8 @@ export function AnimatedPanda({ isMoving, hasWon, scale = 0.025 }) {
   const actionsRef = useRef({})
   const [currentAction, setCurrentAction] = useState('idle')
   const [winAnimStarted, setWinAnimStarted] = useState(false)
+  const [caughtAnimStarted, setCaughtAnimStarted] = useState(false)
+  const caughtTimeRef = useRef(0)
   
   const playerCaught = useGameStore(state => state.playerCaught)
 
@@ -62,6 +57,7 @@ export function AnimatedPanda({ isMoving, hasWon, scale = 0.025 }) {
   const idleFbx = useFBX('/models/Idle.fbx')
   const walkFbx = useFBX('/models/Start_Walking.fbx')
   const danceFbx = useFBX('/models/Hip_Hop_Dancing_2.fbx')
+  const angryFbx = useFBX('/models/Angry.fbx')
 
   // Clone the model to avoid sharing issues
   const model = useMemo(() => {
@@ -74,7 +70,7 @@ export function AnimatedPanda({ isMoving, hasWon, scale = 0.025 }) {
 
   // Setup animation mixer and actions
   useEffect(() => {
-    if (!model || !idleFbx || !walkFbx || !danceFbx) return
+    if (!model || !idleFbx || !walkFbx || !danceFbx || !angryFbx) return
 
     const mixer = new AnimationMixer(model)
     mixerRef.current = mixer
@@ -83,6 +79,7 @@ export function AnimatedPanda({ isMoving, hasWon, scale = 0.025 }) {
     const idleClip = idleFbx.animations[0] ? fixMixamoBoneNames(idleFbx.animations[0].clone()) : null
     const walkClip = walkFbx.animations[0] ? fixMixamoBoneNames(walkFbx.animations[0].clone()) : null
     const danceClip = danceFbx.animations[0] ? fixMixamoBoneNames(danceFbx.animations[0].clone()) : null
+    const angryClip = angryFbx.animations[0] ? fixMixamoBoneNames(angryFbx.animations[0].clone()) : null
 
     // Create actions
     if (idleClip) {
@@ -103,6 +100,12 @@ export function AnimatedPanda({ isMoving, hasWon, scale = 0.025 }) {
       actionsRef.current.dance = danceAction
     }
 
+    if (angryClip) {
+      const angryAction = mixer.clipAction(angryClip)
+      angryAction.setLoop(LoopRepeat)
+      actionsRef.current.angry = angryAction
+    }
+
     // Start with idle
     if (actionsRef.current.idle) {
       actionsRef.current.idle.play()
@@ -112,7 +115,7 @@ export function AnimatedPanda({ isMoving, hasWon, scale = 0.025 }) {
       mixer.stopAllAction()
       mixer.uncacheRoot(model)
     }
-  }, [model, idleFbx, walkFbx, danceFbx])
+  }, [model, idleFbx, walkFbx, danceFbx, angryFbx])
 
   // Handle animation transitions
   useEffect(() => {
@@ -121,9 +124,13 @@ export function AnimatedPanda({ isMoving, hasWon, scale = 0.025 }) {
     const actions = actionsRef.current
     let targetAction = 'idle'
 
-    if (playerCaught) {
-      // Keep current animation when caught, we'll handle spinning separately
-      return
+    if (playerCaught && !caughtAnimStarted) {
+      // Switch to angry animation when caught
+      targetAction = 'angry'
+      setCaughtAnimStarted(true)
+      caughtTimeRef.current = 0
+    } else if (playerCaught) {
+      targetAction = 'angry'
     } else if (hasWon && !winAnimStarted) {
       targetAction = 'dance'
       setWinAnimStarted(true)
@@ -144,7 +151,7 @@ export function AnimatedPanda({ isMoving, hasWon, scale = 0.025 }) {
       actions[targetAction].reset().fadeIn(0.2).play()
       setCurrentAction(targetAction)
     }
-  }, [isMoving, hasWon, playerCaught, currentAction, winAnimStarted])
+  }, [isMoving, hasWon, playerCaught, currentAction, winAnimStarted, caughtAnimStarted])
 
   // Animation update loop
   useFrame((state, delta) => {
@@ -155,14 +162,17 @@ export function AnimatedPanda({ isMoving, hasWon, scale = 0.025 }) {
 
     if (!groupRef.current) return
 
-    // Caught animation - spin and shrink
+    // Caught animation - float up for 9 seconds while playing angry animation
     if (playerCaught) {
-      groupRef.current.rotation.y += delta * 15
-      const currentScale = groupRef.current.scale.x
-      if (currentScale > 0.001) {
-        groupRef.current.scale.multiplyScalar(0.96)
+      caughtTimeRef.current += delta
+      
+      // Float up smoothly for 9 seconds
+      if (caughtTimeRef.current < 9) {
+        // Float up at a steady rate
+        groupRef.current.position.y += delta * 1.5
+        // Gentle rotation
+        groupRef.current.rotation.y += delta * 2
       }
-      groupRef.current.position.y += delta * 2
     }
   })
 

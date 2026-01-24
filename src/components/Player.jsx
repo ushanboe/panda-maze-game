@@ -8,7 +8,7 @@ import * as THREE from 'three'
 // PAC-MAN STYLE: Tap direction = turn + move until wall
 const CELL_SIZE = 2
 const MOVE_SPEED = 6
-const PLAYER_RADIUS = 0.4
+const PLAYER_RADIUS = 0.6
 const COLLECT_RADIUS = 1.2 // Radius for collecting items
 
 export function Player({ mazeData, walls, onReachExit, onDirectionRef }) {
