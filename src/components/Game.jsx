@@ -11,7 +11,6 @@ import { ScoreDisplay } from './ScoreDisplay'
 import { PointPopups } from './PointPopup'
 import { Coins } from './Coin'
 import { TreasureChest } from './TreasureChest'
-import { ChasingBall } from './ChasingBall'
 import { generateMaze, getMazeWalls, gridToWorld } from '../utils/mazeGenerator'
 import { useGameStore } from '../stores/gameStore'
 import { SoundManager } from '../utils/SoundManager'
@@ -129,11 +128,6 @@ export function Game() {
             <TreasureChest type="10K" />
             <TreasureChest type="50K" />
           </>
-        )}
-
-        {/* Chasing Ball Enemy */}
-        {gameState === 'playing' && (
-          <ChasingBall mazeData={mazeData} />
         )}
 
         {gameState === 'playing' && (
