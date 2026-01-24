@@ -1,76 +1,81 @@
 
-import { useRef, useMemo } from 'react'
+import { useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
-import { useGLTF } from '@react-three/drei'
-import * as THREE from 'three'
 import { useGameStore } from '../stores/gameStore'
 
 // ============================================
-// CRYSTAL CONFIGURATIONS - Map point values to GLB files
+// CRYSTAL CONFIGURATIONS - Beautiful colors
 // ============================================
 const CRYSTAL_CONFIG = {
   100: { 
-    model: '/models/toon_style_-_crystal.glb',
-    scale: 0.8,
-    glowColor: '#00ffff',
-    name: 'Toon Crystal'
+    color: '#00ffff',
+    emissive: '#006666',
+    size: 0.4,
+    name: 'Cyan Crystal'
   },
   250: { 
-    model: '/models/stylized_crystal.glb',
-    scale: 1.0,
-    glowColor: '#ff00ff',
-    name: 'Stylized Crystal'
+    color: '#ff00ff',
+    emissive: '#660066',
+    size: 0.5,
+    name: 'Magenta Crystal'
   },
   500: { 
-    model: '/models/orange_crystal.glb',
-    scale: 0.8,
-    glowColor: '#ff8800',
+    color: '#ff8800',
+    emissive: '#663300',
+    size: 0.6,
     name: 'Orange Crystal'
   },
   1000: { 
-    model: '/models/crystal_heart.glb',
-    scale: 0.6,
-    glowColor: '#ff0066',
-    name: 'Crystal Heart'
+    color: '#ff0066',
+    emissive: '#660033',
+    size: 0.7,
+    name: 'Pink Crystal'
   }
 }
 
-// Preload all crystal models
-Object.values(CRYSTAL_CONFIG).forEach(config => {
-  useGLTF.preload(config.model)
-})
-
 // ============================================
-// CRYSTAL MODEL COMPONENT - Loads and displays GLB
+// PROCEDURAL CRYSTAL - Diamond/gem shape
 // ============================================
-function CrystalModel({ modelPath, scale }) {
-  const { scene } = useGLTF(modelPath)
-
-  const clonedScene = useMemo(() => {
-    const clone = scene.clone()
-    // Enhance materials for better visibility
-    clone.traverse((child) => {
-      if (child.isMesh) {
-        child.castShadow = true
-        child.receiveShadow = true
-        // Make materials more emissive/bright if they exist
-        if (child.material) {
-          const mat = child.material.clone()
-          mat.emissiveIntensity = 0.5
-          if (!mat.emissive) mat.emissive = new THREE.Color(0x444444)
-          child.material = mat
-        }
-      }
-    })
-    return clone
-  }, [scene])
-
-  return <primitive object={clonedScene} scale={scale} />
+function ProceduralCrystal({ color, emissive, size }) {
+  return (
+    <group>
+      {/* Top pyramid */}
+      <mesh position={[0, size * 0.5, 0]} castShadow>
+        <coneGeometry args={[size * 0.6, size * 1.2, 6]} />
+        <meshStandardMaterial
+          color={color}
+          metalness={0.3}
+          roughness={0.1}
+          emissive={emissive}
+          emissiveIntensity={0.8}
+          transparent
+          opacity={0.9}
+        />
+      </mesh>
+      {/* Bottom pyramid (inverted) */}
+      <mesh position={[0, -size * 0.3, 0]} rotation={[Math.PI, 0, 0]} castShadow>
+        <coneGeometry args={[size * 0.6, size * 0.6, 6]} />
+        <meshStandardMaterial
+          color={color}
+          metalness={0.3}
+          roughness={0.1}
+          emissive={emissive}
+          emissiveIntensity={0.8}
+          transparent
+          opacity={0.9}
+        />
+      </mesh>
+      {/* Inner glow core */}
+      <mesh>
+        <sphereGeometry args={[size * 0.25, 16, 16]} />
+        <meshBasicMaterial color={color} transparent opacity={0.7} />
+      </mesh>
+    </group>
+  )
 }
 
 // ============================================
-// ANIMATED CRYSTAL WRAPPER - Handles rotation & float
-// Height at 2.5 (panda head height)
+// ANIMATED CRYSTAL - Rotation & float at head height
 // ============================================
 function AnimatedCrystal({ children, id }) {
   const groupRef = useRef()
@@ -78,9 +83,9 @@ function AnimatedCrystal({ children, id }) {
   useFrame((state) => {
     if (groupRef.current) {
       // Rotate
-      groupRef.current.rotation.y += 0.03
-      // Float up and down at head height (2.5)
-      groupRef.current.position.y = 2.5 + Math.sin(state.clock.elapsedTime * 2 + id) * 0.3
+      groupRef.current.rotation.y += 0.04
+      // Float at head height (2.5)
+      groupRef.current.position.y = 2.5 + Math.sin(state.clock.elapsedTime * 2 + id) * 0.25
     }
   })
 
@@ -92,7 +97,7 @@ function AnimatedCrystal({ children, id }) {
 }
 
 // ============================================
-// GROUND GLOW - Circle under crystal
+// GROUND GLOW
 // ============================================
 function GroundGlow({ color }) {
   const glowRef = useRef()
@@ -116,43 +121,28 @@ function GroundGlow({ color }) {
 // MAIN COIN/CRYSTAL COMPONENT
 // ============================================
 export function Coin({ id, x, z, value, collected }) {
-  // Don't render if collected
   if (collected) return null
 
-  // Get config for this crystal value
   const config = CRYSTAL_CONFIG[value] || CRYSTAL_CONFIG[100]
-  const { model, scale, glowColor } = config
+  const { color, emissive, size } = config
 
   return (
     <group position={[x, 0, z]}>
-      {/* Ground glow */}
-      <GroundGlow color={glowColor} />
-
-      {/* Animated crystal - NO SUSPENSE/FALLBACK to avoid overlay */}
+      <GroundGlow color={color} />
       <AnimatedCrystal id={id}>
-        <CrystalModel modelPath={model} scale={scale} />
+        <ProceduralCrystal color={color} emissive={emissive} size={size} />
       </AnimatedCrystal>
-
-      {/* Point light to make crystal glow */}
-      <pointLight
-        position={[0, 2.5, 0]}
-        color={glowColor}
-        intensity={0.8}
-        distance={4}
-      />
+      <pointLight position={[0, 2.5, 0]} color={color} intensity={0.6} distance={4} />
     </group>
   )
 }
 
 // ============================================
-// COINS CONTAINER - Renders all coins from store
+// COINS CONTAINER
 // ============================================
 export function Coins() {
   const coins = useGameStore((state) => state.coins)
-
-  if (!coins || coins.length === 0) {
-    return null
-  }
+  if (!coins || coins.length === 0) return null
 
   return (
     <>

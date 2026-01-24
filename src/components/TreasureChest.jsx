@@ -1,73 +1,104 @@
 
-import { useRef, useMemo } from 'react'
+import { useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
-import { useGLTF } from '@react-three/drei'
-import * as THREE from 'three'
 import { useGameStore } from '../stores/gameStore'
 
 // ============================================
 // TREASURE CRYSTAL CONFIGURATIONS
-// Using magic_crystal.glb for treasures
 // ============================================
 const TREASURE_CONFIG = {
   10000: {
-    model: '/models/magic_crystal.glb',
-    scale: 1.5,
-    glowColor: '#00ff88',
-    name: 'Magic Crystal (10K)'
+    color: '#00ff88',
+    emissive: '#006633',
+    size: 1.2,
+    name: 'Emerald Crystal (10K)'
   },
   50000: {
-    model: '/models/magic_crystal.glb',
-    scale: 2.5,
-    glowColor: '#ffaa00',
-    name: 'Grand Magic Crystal (50K)'
+    color: '#ffdd00',
+    emissive: '#665500',
+    size: 1.8,
+    name: 'Golden Crystal (50K)'
   }
 }
 
-// Preload treasure model
-useGLTF.preload('/models/magic_crystal.glb')
-
 // ============================================
-// TREASURE CRYSTAL MODEL - Loads and displays GLB
+// LARGE PROCEDURAL CRYSTAL - Multi-faceted gem
 // ============================================
-function TreasureCrystalModel({ modelPath, scale }) {
-  const { scene } = useGLTF(modelPath)
-
-  const clonedScene = useMemo(() => {
-    const clone = scene.clone()
-    // Enhance materials for better visibility
-    clone.traverse((child) => {
-      if (child.isMesh) {
-        child.castShadow = true
-        child.receiveShadow = true
-        // Make materials more emissive/bright
-        if (child.material) {
-          const mat = child.material.clone()
-          mat.emissiveIntensity = 0.8
-          if (!mat.emissive) mat.emissive = new THREE.Color(0x666666)
-          child.material = mat
-        }
-      }
-    })
-    return clone
-  }, [scene])
-
-  return <primitive object={clonedScene} scale={scale} />
+function LargeCrystal({ color, emissive, size }) {
+  return (
+    <group>
+      {/* Main crystal spire */}
+      <mesh position={[0, size * 0.6, 0]} castShadow>
+        <coneGeometry args={[size * 0.5, size * 1.5, 8]} />
+        <meshStandardMaterial
+          color={color}
+          metalness={0.4}
+          roughness={0.1}
+          emissive={emissive}
+          emissiveIntensity={1.0}
+          transparent
+          opacity={0.85}
+        />
+      </mesh>
+      {/* Bottom base */}
+      <mesh position={[0, -size * 0.2, 0]} rotation={[Math.PI, 0, 0]} castShadow>
+        <coneGeometry args={[size * 0.5, size * 0.5, 8]} />
+        <meshStandardMaterial
+          color={color}
+          metalness={0.4}
+          roughness={0.1}
+          emissive={emissive}
+          emissiveIntensity={1.0}
+          transparent
+          opacity={0.85}
+        />
+      </mesh>
+      {/* Side crystals */}
+      {[0, 1, 2, 3].map((i) => {
+        const angle = (i / 4) * Math.PI * 2
+        return (
+          <mesh 
+            key={i}
+            position={[
+              Math.cos(angle) * size * 0.4,
+              size * 0.2,
+              Math.sin(angle) * size * 0.4
+            ]}
+            rotation={[0.3, angle, 0.2]}
+            castShadow
+          >
+            <coneGeometry args={[size * 0.2, size * 0.7, 6]} />
+            <meshStandardMaterial
+              color={color}
+              metalness={0.4}
+              roughness={0.1}
+              emissive={emissive}
+              emissiveIntensity={0.8}
+              transparent
+              opacity={0.8}
+            />
+          </mesh>
+        )
+      })}
+      {/* Inner glow */}
+      <mesh>
+        <sphereGeometry args={[size * 0.3, 16, 16]} />
+        <meshBasicMaterial color={color} transparent opacity={0.6} />
+      </mesh>
+    </group>
+  )
 }
 
 // ============================================
-// ANIMATED TREASURE WRAPPER - Rotation & float
-// Height at 2.5 (panda head height)
+// ANIMATED TREASURE - Rotation & float
 // ============================================
 function AnimatedTreasure({ children, id }) {
   const groupRef = useRef()
 
   useFrame((state) => {
     if (groupRef.current) {
-      // Rotate slowly
-      groupRef.current.rotation.y += 0.02
-      // Float up and down at head height
-      groupRef.current.position.y = 2.5 + Math.sin(state.clock.elapsedTime * 1.5 + id) * 0.4
+      groupRef.current.rotation.y += 0.025
+      groupRef.current.position.y = 2.5 + Math.sin(state.clock.elapsedTime * 1.5 + id) * 0.35
     }
   })
 
@@ -79,7 +110,7 @@ function AnimatedTreasure({ children, id }) {
 }
 
 // ============================================
-// GROUND GLOW - Large circle under treasure
+// GROUND GLOW
 // ============================================
 function GroundGlow({ color }) {
   const glowRef = useRef()
@@ -100,32 +131,24 @@ function GroundGlow({ color }) {
 }
 
 // ============================================
-// SPARKLE RING around treasure
+// SPARKLE RING
 // ============================================
 function SparkleRing({ color }) {
   const groupRef = useRef()
 
   useFrame((state) => {
     if (groupRef.current) {
-      groupRef.current.rotation.y += 0.04
+      groupRef.current.rotation.y += 0.05
     }
   })
 
   return (
     <group ref={groupRef} position={[0, 2.5, 0]}>
-      {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11].map((i) => {
-        const angle = (i / 12) * Math.PI * 2
-        const radius = 1.8
+      {[0, 1, 2, 3, 4, 5, 6, 7].map((i) => {
+        const angle = (i / 8) * Math.PI * 2
         return (
-          <mesh 
-            key={i} 
-            position={[
-              Math.cos(angle) * radius, 
-              Math.sin(i * 0.8) * 0.5, 
-              Math.sin(angle) * radius
-            ]}
-          >
-            <sphereGeometry args={[0.08, 8, 8]} />
+          <mesh key={i} position={[Math.cos(angle) * 1.5, Math.sin(i) * 0.4, Math.sin(angle) * 1.5]}>
+            <sphereGeometry args={[0.1, 8, 8]} />
             <meshBasicMaterial color={color} />
           </mesh>
         )
@@ -135,36 +158,22 @@ function SparkleRing({ color }) {
 }
 
 // ============================================
-// MAIN TREASURE CHEST COMPONENT
+// MAIN TREASURE COMPONENT
 // ============================================
 export function TreasureChest({ id, x, z, value, collected }) {
-  // Don't render if collected
   if (collected) return null
 
-  // Get config for this treasure value
   const config = TREASURE_CONFIG[value] || TREASURE_CONFIG[10000]
-  const { model, scale, glowColor } = config
+  const { color, emissive, size } = config
 
   return (
     <group position={[x, 0, z]}>
-      {/* Ground glow */}
-      <GroundGlow color={glowColor} />
-
-      {/* Animated treasure crystal - NO SUSPENSE/FALLBACK */}
+      <GroundGlow color={color} />
       <AnimatedTreasure id={id}>
-        <TreasureCrystalModel modelPath={model} scale={scale} />
+        <LargeCrystal color={color} emissive={emissive} size={size} />
       </AnimatedTreasure>
-
-      {/* Sparkle ring */}
-      <SparkleRing color={glowColor} />
-
-      {/* Point light to make treasure glow */}
-      <pointLight
-        position={[0, 2.5, 0]}
-        color={glowColor}
-        intensity={1.5}
-        distance={6}
-      />
+      <SparkleRing color={color} />
+      <pointLight position={[0, 2.5, 0]} color={color} intensity={1.2} distance={6} />
     </group>
   )
 }
@@ -174,10 +183,7 @@ export function TreasureChest({ id, x, z, value, collected }) {
 // ============================================
 export function TreasureChests() {
   const treasures = useGameStore((state) => state.treasures)
-
-  if (!treasures || treasures.length === 0) {
-    return null
-  }
+  if (!treasures || treasures.length === 0) return null
 
   return (
     <>
