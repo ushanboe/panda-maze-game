@@ -1,5 +1,5 @@
 
-import { useRef, useEffect, useMemo, useState, Suspense } from 'react'
+import { useRef, useEffect, useMemo } from 'react'
 import { useFrame } from '@react-three/fiber'
 import { useFBX } from '@react-three/drei'
 import * as THREE from 'three'
@@ -13,8 +13,8 @@ function fixMixamoBoneNames(clip) {
   return clip
 }
 
-// Fallback procedural panda (in case FBX fails)
-function ProceduralPanda({ isMoving, hasWon }) {
+// Procedural panda (used as permanent fallback - no FBX)
+export function AnimatedPanda({ isMoving, hasWon, scale = 1 }) {
   const groupRef = useRef()
   const bounceRef = useRef(0)
   const wobbleRef = useRef(0)
@@ -37,7 +37,7 @@ function ProceduralPanda({ isMoving, hasWon }) {
     }
   })
 
-  const s = 2
+  const s = 1.8  // Good size for maze
 
   return (
     <group ref={groupRef} scale={[s, s, s]}>
@@ -116,129 +116,5 @@ function ProceduralPanda({ isMoving, hasWon }) {
         <meshStandardMaterial color="#1a1a1a" />
       </mesh>
     </group>
-  )
-}
-
-// FBX Panda component
-function FBXPanda({ isMoving, hasWon, scale }) {
-  const groupRef = useRef()
-  const mixerRef = useRef(null)
-  const actionsRef = useRef({})
-  const currentActionRef = useRef(null)
-
-  const idleFbx = useFBX('/models/panda_idle.fbx')
-  const walkFbx = useFBX('/models/panda_walk.fbx')
-
-  const clonedModel = useMemo(() => {
-    if (!idleFbx) return null
-    const clone = SkeletonUtils.clone(idleFbx)
-
-    clone.traverse((child) => {
-      if (child.isBone) {
-        child.name = child.name.replace(/mixamorig:/g, 'mixamorig')
-      }
-      if (child.isMesh) {
-        child.castShadow = true
-        child.receiveShadow = true
-      }
-    })
-
-    return clone
-  }, [idleFbx])
-
-  useEffect(() => {
-    if (!clonedModel) return
-
-    const mixer = new THREE.AnimationMixer(clonedModel)
-    mixerRef.current = mixer
-
-    if (idleFbx.animations && idleFbx.animations.length > 0) {
-      const idleClip = fixMixamoBoneNames(idleFbx.animations[0].clone())
-      idleClip.name = 'idle'
-      const idleAction = mixer.clipAction(idleClip)
-      actionsRef.current.idle = idleAction
-    }
-
-    if (walkFbx.animations && walkFbx.animations.length > 0) {
-      const walkClip = fixMixamoBoneNames(walkFbx.animations[0].clone())
-      walkClip.name = 'walk'
-      const walkAction = mixer.clipAction(walkClip)
-      actionsRef.current.walk = walkAction
-    }
-
-    if (actionsRef.current.idle) {
-      actionsRef.current.idle.play()
-      currentActionRef.current = actionsRef.current.idle
-    }
-
-    return () => {
-      mixer.stopAllAction()
-      mixer.uncacheRoot(clonedModel)
-    }
-  }, [clonedModel, idleFbx, walkFbx])
-
-  useEffect(() => {
-    const actions = actionsRef.current
-    const currentAction = currentActionRef.current
-
-    if (!actions.idle || !actions.walk) return
-
-    const targetAction = isMoving ? actions.walk : actions.idle
-
-    if (currentAction !== targetAction) {
-      targetAction.reset()
-      targetAction.setEffectiveTimeScale(1)
-      targetAction.setEffectiveWeight(1)
-      targetAction.fadeIn(0.2)
-
-      if (currentAction) {
-        currentAction.fadeOut(0.2)
-      }
-
-      targetAction.play()
-      currentActionRef.current = targetAction
-    }
-  }, [isMoving])
-
-  useFrame((state, delta) => {
-    if (mixerRef.current) {
-      mixerRef.current.update(delta)
-    }
-
-    if (hasWon && groupRef.current) {
-      groupRef.current.rotation.y += delta * 5
-      groupRef.current.position.y = Math.abs(Math.sin(state.clock.elapsedTime * 8)) * 0.3
-    }
-  })
-
-  if (!clonedModel) return null
-
-  return (
-    <group ref={groupRef} scale={[scale, scale, scale]} position={[0, 0, 0]}>
-      <primitive object={clonedModel} />
-    </group>
-  )
-}
-
-// Main component with Suspense fallback
-export function AnimatedPanda({ isMoving, hasWon, scale = 0.003 }) {
-  const [useFallback, setUseFallback] = useState(false)
-
-  // If FBX fails, use fallback
-  useEffect(() => {
-    const timeout = setTimeout(() => {
-      // If still loading after 5 seconds, use fallback
-    }, 5000)
-    return () => clearTimeout(timeout)
-  }, [])
-
-  if (useFallback) {
-    return <ProceduralPanda isMoving={isMoving} hasWon={hasWon} />
-  }
-
-  return (
-    <Suspense fallback={<ProceduralPanda isMoving={isMoving} hasWon={hasWon} />}>
-      <FBXPanda isMoving={isMoving} hasWon={hasWon} scale={scale} />
-    </Suspense>
   )
 }
