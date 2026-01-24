@@ -1,229 +1,320 @@
-
-import { useRef, useEffect, useMemo } from 'react'
-import { useFrame } from '@react-three/fiber'
-import { useFBX } from '@react-three/drei'
+import { useRef, useEffect, useMemo, useState, useCallback } from 'react'
+import { useFrame, useLoader } from '@react-three/fiber'
+import { FBXLoader } from 'three/examples/jsm/loaders/FBXLoader'
 import * as THREE from 'three'
 import { SkeletonUtils } from 'three-stdlib'
 import { useGameStore } from '../stores/gameStore'
 
-const CELL_SIZE = 2
-const GHOST_SPEED = 4  // Slightly slower than player (6)
-const GHOST_RADIUS = 0.8
-const CATCH_DISTANCE = 1.2
+// BFS pathfinding to find path from ghost to player
+function findPath(maze, start, end) {
+  const rows = maze.length
+  const cols = maze[0].length
 
-// BFS pathfinding - optimized with parent tracking
-function findPath(start, goal, walls, mazeWidth, mazeHeight) {
-  const wallSet = new Set(walls.map(w => `${Math.round(w.x)},${Math.round(w.z)}`))
+  // Convert world positions to grid positions
+  const startGrid = { x: Math.round(start.x), z: Math.round(start.z) }
+  const endGrid = { x: Math.round(end.x), z: Math.round(end.z) }
 
-  const startKey = `${Math.round(start.x)},${Math.round(start.z)}`
-  const goalKey = `${Math.round(goal.x)},${Math.round(goal.z)}`
+  // Clamp to maze bounds
+  startGrid.x = Math.max(0, Math.min(cols - 1, startGrid.x))
+  startGrid.z = Math.max(0, Math.min(rows - 1, startGrid.z))
+  endGrid.x = Math.max(0, Math.min(cols - 1, endGrid.x))
+  endGrid.z = Math.max(0, Math.min(rows - 1, endGrid.z))
 
-  if (startKey === goalKey) return [goal]
-
-  const queue = [{ x: Math.round(start.x), z: Math.round(start.z) }]
-  const visited = new Set([startKey])
-  const parent = new Map()
+  const queue = [{ ...startGrid, path: [] }]
+  const visited = new Set()
+  visited.add(`${startGrid.x},${startGrid.z}`)
 
   const directions = [
-    { dx: 0, dz: -CELL_SIZE },  // Up
-    { dx: CELL_SIZE, dz: 0 },   // Right
-    { dx: 0, dz: CELL_SIZE },   // Down
-    { dx: -CELL_SIZE, dz: 0 }   // Left
+    { dx: 0, dz: -1 }, // up
+    { dx: 0, dz: 1 },  // down
+    { dx: -1, dz: 0 }, // left
+    { dx: 1, dz: 0 }   // right
   ]
 
   while (queue.length > 0) {
     const current = queue.shift()
-    const currentKey = `${current.x},${current.z}`
+
+    if (current.x === endGrid.x && current.z === endGrid.z) {
+      return current.path
+    }
 
     for (const dir of directions) {
-      const next = { x: current.x + dir.dx, z: current.z + dir.dz }
-      const nextKey = `${next.x},${next.z}`
+      const nx = current.x + dir.dx
+      const nz = current.z + dir.dz
+      const key = `${nx},${nz}`
 
-      if (visited.has(nextKey)) continue
-      if (wallSet.has(nextKey)) continue
-
-      visited.add(nextKey)
-      parent.set(nextKey, currentKey)
-
-      if (nextKey === goalKey) {
-        // Reconstruct path
-        const path = []
-        let key = goalKey
-        while (key && key !== startKey) {
-          const [x, z] = key.split(',').map(Number)
-          path.unshift({ x, z })
-          key = parent.get(key)
-        }
-        return path
+      if (nx >= 0 && nx < cols && nz >= 0 && nz < rows && 
+          !visited.has(key) && maze[nz][nx] === 0) {
+        visited.add(key)
+        queue.push({
+          x: nx,
+          z: nz,
+          path: [...current.path, { x: nx, z: nz }]
+        })
       }
-
-      queue.push(next)
     }
   }
 
-  return []  // No path found
+  return [] // No path found
+}
+
+// Procedural ghost as fallback
+function ProceduralGhost({ position, opacity }) {
+  const groupRef = useRef()
+
+  useFrame((state) => {
+    if (!groupRef.current) return
+    // Floating animation
+    groupRef.current.position.y = position[1] + Math.sin(state.clock.elapsedTime * 2) * 0.2
+  })
+
+  return (
+    <group ref={groupRef} position={position}>
+      {/* Ghost body */}
+      <mesh castShadow>
+        <capsuleGeometry args={[0.3, 0.6, 8, 16]} />
+        <meshStandardMaterial 
+          color="#8844ff" 
+          transparent 
+          opacity={opacity * 0.7}
+          emissive="#4422aa"
+          emissiveIntensity={0.5}
+        />
+      </mesh>
+      {/* Eyes */}
+      <mesh position={[-0.1, 0.2, 0.25]}>
+        <sphereGeometry args={[0.08, 8, 8]} />
+        <meshStandardMaterial color="#ffffff" emissive="#ffffff" emissiveIntensity={0.5} />
+      </mesh>
+      <mesh position={[0.1, 0.2, 0.25]}>
+        <sphereGeometry args={[0.08, 8, 8]} />
+        <meshStandardMaterial color="#ffffff" emissive="#ffffff" emissiveIntensity={0.5} />
+      </mesh>
+      {/* Pupils */}
+      <mesh position={[-0.1, 0.2, 0.32]}>
+        <sphereGeometry args={[0.04, 8, 8]} />
+        <meshStandardMaterial color="#000000" />
+      </mesh>
+      <mesh position={[0.1, 0.2, 0.32]}>
+        <sphereGeometry args={[0.04, 8, 8]} />
+        <meshStandardMaterial color="#000000" />
+      </mesh>
+      {/* Glow effect */}
+      <pointLight color="#8844ff" intensity={0.5} distance={3} />
+    </group>
+  )
 }
 
 export function Ghost({ mazeData, walls, onCatchPlayer }) {
   const groupRef = useRef()
   const mixerRef = useRef(null)
+  const [useFallback, setUseFallback] = useState(false)
 
-  // Use refs for performance (no re-renders)
-  const positionRef = useRef({ x: 0, z: 0 })
-  const pathRef = useRef([])
-  const pathIndexRef = useRef(0)
-  const lastPathTime = useRef(0)
-  const isActiveRef = useRef(true)
+  // Ghost state
+  const [ghostPos, setGhostPos] = useState({ x: 1, z: 1 })
+  const [targetPos, setTargetPos] = useState(null)
+  const [path, setPath] = useState([])
+  const [opacity, setOpacity] = useState(0)
 
-  // Load ghost FBX
-  const ghostFbx = useFBX('/models/ghost.fbx')
+  // Get player position and game state from store
+  const playerPosition = useGameStore(state => state.playerPosition)
+  const gameState = useGameStore(state => state.gameState)
+  const playerCaught = useGameStore(state => state.playerCaught)
+  const setPlayerCaught = useGameStore(state => state.setPlayerCaught)
+
+  const GHOST_SPEED = 2.5
+  const CATCH_DISTANCE = 0.8
+
+  // Try to load FBX model with error handling
+  let ghostFbx = null
+  let loadError = false
+
+  try {
+    ghostFbx = useLoader(FBXLoader, '/models/ghost.fbx')
+  } catch (error) {
+    console.error('Ghost FBX loading error:', error)
+    loadError = true
+  }
+
+  // Set fallback if loading fails
+  useEffect(() => {
+    if (loadError) {
+      console.log('Using procedural ghost fallback due to FBX load error')
+      setUseFallback(true)
+    }
+  }, [loadError])
 
   // Clone the model
   const clonedModel = useMemo(() => {
-    if (!ghostFbx) return null
-    const clone = SkeletonUtils.clone(ghostFbx)
+    if (!ghostFbx || useFallback) return null
+    try {
+      const clone = SkeletonUtils.clone(ghostFbx)
 
-    clone.traverse((child) => {
-      if (child.isMesh) {
-        child.castShadow = true
-        child.receiveShadow = true
-        // Make ghost slightly transparent and glowing
-        if (child.material) {
-          child.material = child.material.clone()
-          child.material.transparent = true
-          child.material.opacity = 0.85
-          child.material.emissive = new THREE.Color(0x4444ff)
-          child.material.emissiveIntensity = 0.3
+      clone.traverse((child) => {
+        if (child.isMesh) {
+          child.castShadow = true
+          child.receiveShadow = true
+          if (child.material) {
+            child.material = child.material.clone()
+            child.material.transparent = true
+            child.material.opacity = 0.7
+            // Add ghostly glow
+            child.material.emissive = new THREE.Color(0x4422aa)
+            child.material.emissiveIntensity = 0.3
+          }
         }
-      }
-    })
+      })
 
-    return clone
-  }, [ghostFbx])
+      return clone
+    } catch (error) {
+      console.error('Error cloning ghost model:', error)
+      setUseFallback(true)
+      return null
+    }
+  }, [ghostFbx, useFallback])
 
   // Setup animation mixer
   useEffect(() => {
-    if (!clonedModel || !ghostFbx.animations || ghostFbx.animations.length === 0) return
+    if (!clonedModel || useFallback) return
 
-    const mixer = new THREE.AnimationMixer(clonedModel)
-    mixerRef.current = mixer
+    try {
+      const mixer = new THREE.AnimationMixer(clonedModel)
+      mixerRef.current = mixer
 
-    // Play first animation (if any)
-    const clip = ghostFbx.animations[0]
-    const action = mixer.clipAction(clip)
-    action.play()
+      if (ghostFbx.animations && ghostFbx.animations.length > 0) {
+        const action = mixer.clipAction(ghostFbx.animations[0])
+        action.play()
+      }
 
-    return () => {
-      mixer.stopAllAction()
+      return () => {
+        mixer.stopAllAction()
+      }
+    } catch (error) {
+      console.error('Error setting up ghost animations:', error)
+      setUseFallback(true)
     }
-  }, [clonedModel, ghostFbx])
+  }, [clonedModel, ghostFbx, useFallback])
 
-  // Calculate ghost start position (at exit)
-  const exitPos = useMemo(() => ({
-    x: (mazeData.exit.x - mazeData.width / 2) * CELL_SIZE + CELL_SIZE / 2,
-    z: (mazeData.exit.y - mazeData.height / 2) * CELL_SIZE + CELL_SIZE / 2
-  }), [mazeData])
-
-  // Initialize position
+  // Initialize ghost position
   useEffect(() => {
-    positionRef.current = { x: exitPos.x, z: exitPos.z }
-    pathRef.current = []
-    pathIndexRef.current = 0
-    isActiveRef.current = true
-
-    if (groupRef.current) {
-      groupRef.current.position.set(exitPos.x, 0, exitPos.z)
+    if (mazeData && mazeData.length > 0) {
+      // Start ghost at a position away from player
+      const startX = mazeData[0].length - 2
+      const startZ = mazeData.length - 2
+      setGhostPos({ x: startX, z: startZ })
     }
-  }, [exitPos])
+  }, [mazeData])
 
+  // Fade in ghost
+  useEffect(() => {
+    if (gameState === 'playing') {
+      const fadeIn = setInterval(() => {
+        setOpacity(prev => {
+          if (prev >= 0.7) {
+            clearInterval(fadeIn)
+            return 0.7
+          }
+          return prev + 0.05
+        })
+      }, 100)
+      return () => clearInterval(fadeIn)
+    }
+  }, [gameState])
+
+  // Pathfinding - update path periodically
+  useEffect(() => {
+    if (!mazeData || !playerPosition || gameState !== 'playing' || playerCaught) return
+
+    const updatePath = () => {
+      const newPath = findPath(
+        mazeData,
+        ghostPos,
+        { x: playerPosition.x, z: playerPosition.z }
+      )
+      setPath(newPath)
+      if (newPath.length > 0) {
+        setTargetPos(newPath[0])
+      }
+    }
+
+    updatePath()
+    const interval = setInterval(updatePath, 500) // Update path every 500ms
+
+    return () => clearInterval(interval)
+  }, [mazeData, playerPosition, ghostPos, gameState, playerCaught])
+
+  // Movement and animation loop
   useFrame((state, delta) => {
-    if (!groupRef.current || !isActiveRef.current) return
+    if (gameState !== 'playing' || playerCaught) return
 
-    // Update animation
+    // Update animation mixer
     if (mixerRef.current) {
       mixerRef.current.update(delta)
     }
 
-    // Get player position directly from store (no subscription)
-    const playerPos = useGameStore.getState().playerPosition
-    if (!playerPos) return
+    // Move towards target
+    if (targetPos) {
+      const dx = targetPos.x - ghostPos.x
+      const dz = targetPos.z - ghostPos.z
+      const dist = Math.sqrt(dx * dx + dz * dz)
 
-    const ghostPos = positionRef.current
-    const now = state.clock.elapsedTime
+      if (dist > 0.1) {
+        const moveX = (dx / dist) * GHOST_SPEED * delta
+        const moveZ = (dz / dist) * GHOST_SPEED * delta
 
-    // Check if caught player
-    const distToPlayer = Math.hypot(ghostPos.x - playerPos.x, ghostPos.z - playerPos.z)
-    if (distToPlayer < CATCH_DISTANCE) {
-      isActiveRef.current = false
-      onCatchPlayer()
-      return
-    }
-
-    // Recalculate path every 0.5 seconds
-    if (now - lastPathTime.current > 0.5) {
-      lastPathTime.current = now
-
-      // Snap ghost position to grid for pathfinding
-      const snappedGhost = {
-        x: Math.round(ghostPos.x / CELL_SIZE) * CELL_SIZE,
-        z: Math.round(ghostPos.z / CELL_SIZE) * CELL_SIZE
-      }
-
-      const snappedPlayer = {
-        x: Math.round(playerPos.x / CELL_SIZE) * CELL_SIZE,
-        z: Math.round(playerPos.z / CELL_SIZE) * CELL_SIZE
-      }
-
-      pathRef.current = findPath(snappedGhost, snappedPlayer, walls, mazeData.width, mazeData.height)
-      pathIndexRef.current = 0
-    }
-
-    // Move along path
-    const path = pathRef.current
-    if (path.length > 0 && pathIndexRef.current < path.length) {
-      const target = path[pathIndexRef.current]
-      const dx = target.x - ghostPos.x
-      const dz = target.z - ghostPos.z
-      const dist = Math.hypot(dx, dz)
-
-      if (dist < 0.2) {
-        // Reached waypoint, move to next
-        pathIndexRef.current++
-      } else {
-        // Move towards target
-        const moveAmount = GHOST_SPEED * delta
-        ghostPos.x += (dx / dist) * Math.min(moveAmount, dist)
-        ghostPos.z += (dz / dist) * Math.min(moveAmount, dist)
+        setGhostPos(prev => ({
+          x: prev.x + moveX,
+          z: prev.z + moveZ
+        }))
 
         // Rotate to face movement direction
-        const angle = Math.atan2(dx, dz)
-        groupRef.current.rotation.y = angle
+        if (groupRef.current) {
+          const angle = Math.atan2(dx, dz)
+          groupRef.current.rotation.y = angle
+        }
+      } else {
+        // Reached target, get next point in path
+        if (path.length > 1) {
+          setPath(prev => prev.slice(1))
+          setTargetPos(path[1])
+        }
       }
     }
 
-    // Update visual position
-    groupRef.current.position.x = ghostPos.x
-    groupRef.current.position.z = ghostPos.z
+    // Check if caught player
+    if (playerPosition) {
+      const distToPlayer = Math.sqrt(
+        Math.pow(ghostPos.x - playerPosition.x, 2) +
+        Math.pow(ghostPos.z - playerPosition.z, 2)
+      )
+
+      if (distToPlayer < CATCH_DISTANCE) {
+        setPlayerCaught(true)
+        if (onCatchPlayer) onCatchPlayer()
+      }
+    }
 
     // Floating animation
-    groupRef.current.position.y = Math.sin(now * 3) * 0.2 + 0.5
+    if (groupRef.current) {
+      groupRef.current.position.y = 0.5 + Math.sin(state.clock.elapsedTime * 2) * 0.2
+    }
   })
 
-  if (!clonedModel) {
-    // Loading placeholder
+  const position = [ghostPos.x, 0.5, ghostPos.z]
+
+  // Use procedural fallback if FBX loading failed
+  if (useFallback || !clonedModel) {
     return (
-      <mesh position={[exitPos.x, 1, exitPos.z]}>
-        <sphereGeometry args={[0.5, 8, 8]} />
-        <meshStandardMaterial color="#8888ff" transparent opacity={0.5} />
-      </mesh>
+      <group ref={groupRef} position={position}>
+        <ProceduralGhost position={[0, 0, 0]} opacity={opacity} />
+      </group>
     )
   }
 
   return (
-    <group ref={groupRef} position={[exitPos.x, 0.5, exitPos.z]}>
-      <primitive object={clonedModel} scale={[0.01, 0.01, 0.01]} />
-      {/* Ghost glow */}
-      <pointLight color="#6666ff" intensity={2} distance={5} />
+    <group ref={groupRef} position={position}>
+      <primitive object={clonedModel} scale={0.008} />
+      <pointLight color="#8844ff" intensity={0.5} distance={3} />
     </group>
   )
 }

@@ -1,7 +1,6 @@
-
 import { useRef, useEffect, useMemo, useState } from 'react'
-import { useFrame } from '@react-three/fiber'
-import { useFBX } from '@react-three/drei'
+import { useFrame, useLoader } from '@react-three/fiber'
+import { FBXLoader } from 'three/examples/jsm/loaders/FBXLoader'
 import * as THREE from 'three'
 import { SkeletonUtils } from 'three-stdlib'
 import { useGameStore } from '../stores/gameStore'
@@ -14,11 +13,80 @@ function fixMixamoBoneNames(clip) {
   return clip
 }
 
+// Simple procedural panda as fallback
+function ProceduralPanda({ isMoving, hasWon }) {
+  const groupRef = useRef()
+  const playerCaught = useGameStore(state => state.playerCaught)
+
+  useFrame((state, delta) => {
+    if (!groupRef.current) return
+
+    // Bobbing animation when moving
+    if (isMoving) {
+      groupRef.current.position.y = Math.abs(Math.sin(state.clock.elapsedTime * 10)) * 0.1
+    } else {
+      groupRef.current.position.y = 0
+    }
+
+    // Win celebration
+    if (hasWon) {
+      groupRef.current.rotation.y += delta * 5
+      groupRef.current.position.y = Math.abs(Math.sin(state.clock.elapsedTime * 8)) * 0.3
+    }
+
+    // Caught animation
+    if (playerCaught) {
+      groupRef.current.rotation.y += delta * 15
+      groupRef.current.scale.multiplyScalar(0.98)
+    }
+  })
+
+  return (
+    <group ref={groupRef}>
+      {/* Body */}
+      <mesh position={[0, 0.5, 0]} castShadow>
+        <sphereGeometry args={[0.4, 16, 16]} />
+        <meshStandardMaterial color="#ffffff" />
+      </mesh>
+      {/* Head */}
+      <mesh position={[0, 1, 0]} castShadow>
+        <sphereGeometry args={[0.3, 16, 16]} />
+        <meshStandardMaterial color="#ffffff" />
+      </mesh>
+      {/* Ears */}
+      <mesh position={[-0.2, 1.25, 0]} castShadow>
+        <sphereGeometry args={[0.1, 8, 8]} />
+        <meshStandardMaterial color="#1a1a1a" />
+      </mesh>
+      <mesh position={[0.2, 1.25, 0]} castShadow>
+        <sphereGeometry args={[0.1, 8, 8]} />
+        <meshStandardMaterial color="#1a1a1a" />
+      </mesh>
+      {/* Eyes */}
+      <mesh position={[-0.1, 1.05, 0.25]} castShadow>
+        <sphereGeometry args={[0.08, 8, 8]} />
+        <meshStandardMaterial color="#1a1a1a" />
+      </mesh>
+      <mesh position={[0.1, 1.05, 0.25]} castShadow>
+        <sphereGeometry args={[0.08, 8, 8]} />
+        <meshStandardMaterial color="#1a1a1a" />
+      </mesh>
+      {/* Nose */}
+      <mesh position={[0, 0.95, 0.28]} castShadow>
+        <sphereGeometry args={[0.05, 8, 8]} />
+        <meshStandardMaterial color="#1a1a1a" />
+      </mesh>
+    </group>
+  )
+}
+
 export function AnimatedPanda({ isMoving, hasWon, scale = 0.007 }) {
   const groupRef = useRef()
   const mixerRef = useRef(null)
   const actionsRef = useRef({})
   const currentActionRef = useRef(null)
+  const [useFallback, setUseFallback] = useState(false)
+  const [modelsLoaded, setModelsLoaded] = useState(false)
 
   // Track caught state for disappear animation
   const playerCaught = useGameStore(state => state.playerCaught)
@@ -26,33 +94,59 @@ export function AnimatedPanda({ isMoving, hasWon, scale = 0.007 }) {
   const [disappearScale, setDisappearScale] = useState(1)
   const materialsRef = useRef([])
 
-  // Load FBX models
-  const idleFbx = useFBX('/models/panda_idle.fbx')
-  const walkFbx = useFBX('/models/panda_walk.fbx')
+  // Try to load FBX models with error handling
+  let idleFbx = null
+  let walkFbx = null
+  let loadError = false
+
+  try {
+    idleFbx = useLoader(FBXLoader, '/models/panda_idle.fbx')
+    walkFbx = useLoader(FBXLoader, '/models/panda_walk.fbx')
+  } catch (error) {
+    console.error('FBX loading error:', error)
+    loadError = true
+  }
+
+  // Set fallback if loading fails
+  useEffect(() => {
+    if (loadError) {
+      console.log('Using procedural panda fallback due to FBX load error')
+      setUseFallback(true)
+    } else if (idleFbx && walkFbx) {
+      console.log('FBX models loaded successfully')
+      setModelsLoaded(true)
+    }
+  }, [loadError, idleFbx, walkFbx])
 
   // Clone the model to avoid sharing skeleton issues
   const clonedModel = useMemo(() => {
-    if (!idleFbx) return null
-    const clone = SkeletonUtils.clone(idleFbx)
+    if (!idleFbx || useFallback) return null
+    try {
+      const clone = SkeletonUtils.clone(idleFbx)
 
-    // Fix bone names in the cloned model
-    clone.traverse((child) => {
-      if (child.isBone) {
-        child.name = child.name.replace(/mixamorig:/g, 'mixamorig')
-      }
-      if (child.isMesh) {
-        child.castShadow = true
-        child.receiveShadow = true
-        // Make material transparent-capable for disappear effect
-        if (child.material) {
-          child.material = child.material.clone()
-          child.material.transparent = true
+      // Fix bone names in the cloned model
+      clone.traverse((child) => {
+        if (child.isBone) {
+          child.name = child.name.replace(/mixamorig:/g, 'mixamorig')
         }
-      }
-    })
+        if (child.isMesh) {
+          child.castShadow = true
+          child.receiveShadow = true
+          // Make material transparent-capable for disappear effect
+          if (child.material) {
+            child.material = child.material.clone()
+            child.material.transparent = true
+          }
+        }
+      })
 
-    return clone
-  }, [idleFbx])
+      return clone
+    } catch (error) {
+      console.error('Error cloning FBX model:', error)
+      setUseFallback(true)
+      return null
+    }
+  }, [idleFbx, useFallback])
 
   // Collect materials for opacity animation
   useEffect(() => {
@@ -68,41 +162,47 @@ export function AnimatedPanda({ isMoving, hasWon, scale = 0.007 }) {
 
   // Setup animation mixer and actions
   useEffect(() => {
-    if (!clonedModel) return
+    if (!clonedModel || useFallback) return
 
-    const mixer = new THREE.AnimationMixer(clonedModel)
-    mixerRef.current = mixer
+    try {
+      const mixer = new THREE.AnimationMixer(clonedModel)
+      mixerRef.current = mixer
 
-    // Setup idle animation
-    if (idleFbx.animations && idleFbx.animations.length > 0) {
-      const idleClip = fixMixamoBoneNames(idleFbx.animations[0].clone())
-      idleClip.name = 'idle'
-      const idleAction = mixer.clipAction(idleClip)
-      actionsRef.current.idle = idleAction
+      // Setup idle animation
+      if (idleFbx.animations && idleFbx.animations.length > 0) {
+        const idleClip = fixMixamoBoneNames(idleFbx.animations[0].clone())
+        idleClip.name = 'idle'
+        const idleAction = mixer.clipAction(idleClip)
+        actionsRef.current.idle = idleAction
+      }
+
+      // Setup walk animation
+      if (walkFbx && walkFbx.animations && walkFbx.animations.length > 0) {
+        const walkClip = fixMixamoBoneNames(walkFbx.animations[0].clone())
+        walkClip.name = 'walk'
+        const walkAction = mixer.clipAction(walkClip)
+        actionsRef.current.walk = walkAction
+      }
+
+      // Start with idle
+      if (actionsRef.current.idle) {
+        actionsRef.current.idle.play()
+        currentActionRef.current = actionsRef.current.idle
+      }
+
+      return () => {
+        mixer.stopAllAction()
+        mixer.uncacheRoot(clonedModel)
+      }
+    } catch (error) {
+      console.error('Error setting up animations:', error)
+      setUseFallback(true)
     }
-
-    // Setup walk animation
-    if (walkFbx.animations && walkFbx.animations.length > 0) {
-      const walkClip = fixMixamoBoneNames(walkFbx.animations[0].clone())
-      walkClip.name = 'walk'
-      const walkAction = mixer.clipAction(walkClip)
-      actionsRef.current.walk = walkAction
-    }
-
-    // Start with idle
-    if (actionsRef.current.idle) {
-      actionsRef.current.idle.play()
-      currentActionRef.current = actionsRef.current.idle
-    }
-
-    return () => {
-      mixer.stopAllAction()
-      mixer.uncacheRoot(clonedModel)
-    }
-  }, [clonedModel, idleFbx, walkFbx])
+  }, [clonedModel, idleFbx, walkFbx, useFallback])
 
   // Handle animation transitions
   useEffect(() => {
+    if (useFallback) return
     const actions = actionsRef.current
     const currentAction = currentActionRef.current
 
@@ -123,10 +223,12 @@ export function AnimatedPanda({ isMoving, hasWon, scale = 0.007 }) {
       targetAction.play()
       currentActionRef.current = targetAction
     }
-  }, [isMoving])
+  }, [isMoving, useFallback])
 
   // Animation loop
   useFrame((state, delta) => {
+    if (useFallback) return
+
     if (mixerRef.current) {
       mixerRef.current.update(delta)
     }
@@ -159,14 +261,9 @@ export function AnimatedPanda({ isMoving, hasWon, scale = 0.007 }) {
     }
   })
 
-  if (!clonedModel) {
-    // Simple loading placeholder - small sphere
-    return (
-      <mesh>
-        <sphereGeometry args={[0.3, 8, 8]} />
-        <meshStandardMaterial color="#ffffff" transparent opacity={0.5} />
-      </mesh>
-    )
+  // Use procedural fallback if FBX loading failed
+  if (useFallback || !clonedModel) {
+    return <ProceduralPanda isMoving={isMoving} hasWon={hasWon} />
   }
 
   // Don't render if fully disappeared
