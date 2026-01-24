@@ -1,6 +1,8 @@
+
 import { useRef, useMemo, Suspense } from 'react'
 import { useFrame } from '@react-three/fiber'
 import { useGLTF } from '@react-three/drei'
+import * as THREE from 'three'
 import { useGameStore } from '../stores/gameStore'
 import { ErrorBoundary } from './ErrorBoundary'
 
@@ -29,23 +31,29 @@ function FallbackCoin({ color = '#ffd700' }) {
 
 // ============================================
 // GLB COIN MODELS - Each loads one specific model
-// useGLTF is at TOP LEVEL - unconditional!
-// Added rotation to orient coins properly (they're flat on XY plane in GLB)
+// Override materials to ensure proper lighting/color
 // ============================================
 function SilverCoinModel({ scale }) {
   const { scene } = useGLTF('/models/silver_coin.glb')
   const cloned = useMemo(() => {
     const clone = scene.clone()
-    // Traverse and ensure materials are properly set up
+    // Override materials to be bright silver
     clone.traverse((child) => {
       if (child.isMesh) {
         child.castShadow = true
         child.receiveShadow = true
+        // Override with bright metallic material
+        child.material = new THREE.MeshStandardMaterial({
+          color: '#c0c0c0',
+          metalness: 0.9,
+          roughness: 0.1,
+          emissive: '#404040',
+          emissiveIntensity: 0.3
+        })
       }
     })
     return clone
   }, [scene])
-  // Rotate 90 degrees on X to stand the coin up (it's flat in the GLB)
   return <primitive object={cloned} scale={scale} rotation={[Math.PI / 2, 0, 0]} />
 }
 
@@ -53,10 +61,19 @@ function GoldCoinModel({ scale }) {
   const { scene } = useGLTF('/models/gold_coin.glb')
   const cloned = useMemo(() => {
     const clone = scene.clone()
+    // Override materials to be bright gold
     clone.traverse((child) => {
       if (child.isMesh) {
         child.castShadow = true
         child.receiveShadow = true
+        // Override with bright gold metallic material
+        child.material = new THREE.MeshStandardMaterial({
+          color: '#ffd700',
+          metalness: 0.9,
+          roughness: 0.1,
+          emissive: '#ff9900',
+          emissiveIntensity: 0.4
+        })
       }
     })
     return clone
@@ -68,10 +85,19 @@ function PlatinumCoinModel({ scale }) {
   const { scene } = useGLTF('/models/vcoin.glb')
   const cloned = useMemo(() => {
     const clone = scene.clone()
+    // Override materials to be bright platinum
     clone.traverse((child) => {
       if (child.isMesh) {
         child.castShadow = true
         child.receiveShadow = true
+        // Override with bright platinum metallic material
+        child.material = new THREE.MeshStandardMaterial({
+          color: '#e8e8e8',
+          metalness: 0.95,
+          roughness: 0.05,
+          emissive: '#aaaaff',
+          emissiveIntensity: 0.5
+        })
       }
     })
     return clone
@@ -81,13 +107,37 @@ function PlatinumCoinModel({ scale }) {
 
 // ============================================
 // COIN CONFIGURATIONS
-// Increased scales since GLB models are ~2.3 units diameter
+// Bronze uses silver model with bronze material override
 // ============================================
 const COIN_CONFIG = {
-  100: { name: 'Bronze', color: '#cd7f32', scale: 0.3, Model: SilverCoinModel },
+  100: { name: 'Bronze', color: '#cd7f32', scale: 0.3, Model: BronzeCoinModel },
   250: { name: 'Silver', color: '#c0c0c0', scale: 0.35, Model: SilverCoinModel },
   500: { name: 'Gold', color: '#ffd700', scale: 0.35, Model: GoldCoinModel },
   1000: { name: 'Platinum', color: '#e5e4e2', scale: 0.25, Model: PlatinumCoinModel }
+}
+
+// Bronze coin uses silver model but with bronze material
+function BronzeCoinModel({ scale }) {
+  const { scene } = useGLTF('/models/silver_coin.glb')
+  const cloned = useMemo(() => {
+    const clone = scene.clone()
+    clone.traverse((child) => {
+      if (child.isMesh) {
+        child.castShadow = true
+        child.receiveShadow = true
+        // Override with bronze metallic material
+        child.material = new THREE.MeshStandardMaterial({
+          color: '#cd7f32',
+          metalness: 0.8,
+          roughness: 0.2,
+          emissive: '#8b4513',
+          emissiveIntensity: 0.3
+        })
+      }
+    })
+    return clone
+  }, [scene])
+  return <primitive object={cloned} scale={scale} rotation={[Math.PI / 2, 0, 0]} />
 }
 
 // ============================================

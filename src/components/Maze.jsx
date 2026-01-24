@@ -92,6 +92,7 @@ function BambooWall({ x, z }) {
 }
 
 // Generate coin and treasure positions using MAZE GRID
+// UPDATED: Place chests on OPPOSITE SIDES of the maze for challenge
 function generateCollectibles(mazeData) {
   // Safety check
   if (!mazeData || !mazeData.grid || !mazeData.start || !mazeData.exit) {
@@ -128,27 +129,72 @@ function generateCollectibles(mazeData) {
     return { coins: [], treasure10KPos: { x: 0, z: 0 }, treasure50KPos: { x: 0, z: 0 } }
   }
 
-  // Sort by distance from exit (furthest first)
-  const sortedByExitDist = [...pathCells].sort((a, b) => b.distFromExit - a.distFromExit)
+  // ============================================
+  // TREASURE PLACEMENT - OPPOSITE SIDES OF MAZE
+  // 10K chest: Near the START but not too close (player must explore)
+  // 50K chest: Near the EXIT but not too close (harder to get)
+  // ============================================
 
-  // 50K treasure at THE FURTHEST point from exit
-  const treasure50KCell = sortedByExitDist[0]
-  const treasure50KWorld = gridToWorld(treasure50KCell.gridX, treasure50KCell.gridY, mazeData, CELL_SIZE)
+  // Sort by distance from start (furthest first for 10K - make them explore)
+  const sortedByStartDist = [...pathCells].sort((a, b) => b.distFromStart - a.distFromStart)
 
-  // 10K treasure at a point far from both exit AND 50K treasure
-  let treasure10KCell = sortedByExitDist[1] || treasure50KCell
-  for (const cell of sortedByExitDist.slice(1)) {
-    const distFrom50K = Math.hypot(cell.gridX - treasure50KCell.gridX, cell.gridY - treasure50KCell.gridY)
-    if (distFrom50K >= 4) {
+  // Sort by distance from exit (closest first for 50K - near exit but not at exit)
+  const sortedByExitDist = [...pathCells].sort((a, b) => a.distFromExit - b.distFromExit)
+
+  // 10K treasure: Find a cell that is FAR from start (opposite side)
+  // but also reasonably far from exit (so it's in a different area)
+  let treasure10KCell = null
+  for (const cell of sortedByStartDist) {
+    // Must be at least 8 grid units from start and 6 from exit
+    if (cell.distFromStart >= 8 && cell.distFromExit >= 6) {
       treasure10KCell = cell
       break
     }
   }
-  const treasure10KWorld = gridToWorld(treasure10KCell.gridX, treasure10KCell.gridY, mazeData, CELL_SIZE)
+  // Fallback: just use furthest from start
+  if (!treasure10KCell) {
+    treasure10KCell = sortedByStartDist[0]
+  }
 
-  console.log('📦 Treasure positions:', {
-    '50K': treasure50KWorld,
-    '10K': treasure10KWorld
+  // 50K treasure: Find a cell that is CLOSE to exit but not too close
+  // and FAR from the 10K chest location
+  let treasure50KCell = null
+  for (const cell of sortedByExitDist) {
+    const distFrom10K = Math.hypot(cell.gridX - treasure10KCell.gridX, cell.gridY - treasure10KCell.gridY)
+    // Must be at least 3 units from exit (not right at exit)
+    // and at least 10 units from 10K chest (opposite side)
+    if (cell.distFromExit >= 3 && cell.distFromExit <= 10 && distFrom10K >= 10) {
+      treasure50KCell = cell
+      break
+    }
+  }
+  // Fallback: find any cell far from 10K
+  if (!treasure50KCell) {
+    for (const cell of sortedByExitDist) {
+      const distFrom10K = Math.hypot(cell.gridX - treasure10KCell.gridX, cell.gridY - treasure10KCell.gridY)
+      if (distFrom10K >= 8) {
+        treasure50KCell = cell
+        break
+      }
+    }
+  }
+  // Final fallback
+  if (!treasure50KCell) {
+    treasure50KCell = sortedByExitDist[Math.min(5, sortedByExitDist.length - 1)]
+  }
+
+  const treasure10KWorld = gridToWorld(treasure10KCell.gridX, treasure10KCell.gridY, mazeData, CELL_SIZE)
+  const treasure50KWorld = gridToWorld(treasure50KCell.gridX, treasure50KCell.gridY, mazeData, CELL_SIZE)
+
+  const distBetweenChests = Math.hypot(
+    treasure10KCell.gridX - treasure50KCell.gridX,
+    treasure10KCell.gridY - treasure50KCell.gridY
+  )
+
+  console.log('📦 Treasure positions (OPPOSITE SIDES):', {
+    '10K': { world: treasure10KWorld, distFromStart: treasure10KCell.distFromStart.toFixed(1) },
+    '50K': { world: treasure50KWorld, distFromExit: treasure50KCell.distFromExit.toFixed(1) },
+    'distBetweenChests': distBetweenChests.toFixed(1)
   })
 
   // Remove used positions
@@ -186,7 +232,7 @@ function generateCollectibles(mazeData) {
     }
   }
 
-  console.log('🪙 Generated coins:', coins.length, coins.map(c => ({ x: c.x.toFixed(1), z: c.z.toFixed(1), value: c.value })))
+  console.log('🪙 Generated coins:', coins.length)
 
   return {
     coins,

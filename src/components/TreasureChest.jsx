@@ -1,3 +1,4 @@
+
 import { useRef, useMemo, Suspense } from 'react'
 import { useFrame } from '@react-three/fiber'
 import { useGLTF } from '@react-three/drei'
@@ -44,8 +45,8 @@ function FallbackChest({ color = '#8B4513', scale = 1 }) {
 
 // ============================================
 // GLB CHEST MODEL - Loads the actual model
-// useGLTF is at TOP LEVEL - unconditional!
 // Model is ~4.2 units wide, ~3.77 units tall
+// Reduced scale by 40% from original
 // ============================================
 function ChestModel({ scale }) {
   const { scene } = useGLTF('/models/treasure_chest.glb')
@@ -80,7 +81,7 @@ function GroundGlow({ color }) {
 
   return (
     <mesh ref={glowRef} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.05, 0]}>
-      <circleGeometry args={[1.5, 32]} />
+      <circleGeometry args={[1.2, 32]} />
       <meshBasicMaterial color={color} transparent opacity={0.4} />
     </mesh>
   )
@@ -121,14 +122,14 @@ function AnimatedChestWrapper({ children }) {
   useFrame((state) => {
     if (groupRef.current) {
       // Float up and down
-      groupRef.current.position.y = 0.5 + Math.sin(state.clock.elapsedTime * 1.5) * 0.15
+      groupRef.current.position.y = 0.3 + Math.sin(state.clock.elapsedTime * 1.5) * 0.1
       // Gentle rotation
-      groupRef.current.rotation.y = Math.sin(state.clock.elapsedTime * 0.5) * 0.2
+      groupRef.current.rotation.y = Math.sin(state.clock.elapsedTime * 0.5) * 0.15
     }
   })
 
   return (
-    <group ref={groupRef} position={[0, 0.5, 0]}>
+    <group ref={groupRef} position={[0, 0.3, 0]}>
       {children}
     </group>
   )
@@ -136,6 +137,7 @@ function AnimatedChestWrapper({ children }) {
 
 // ============================================
 // MAIN TREASURE CHEST COMPONENT
+// Scales reduced by 40%: 0.25->0.15, 0.35->0.21
 // ============================================
 export function TreasureChest({ type = '10K' }) {
   // Get treasure state from store
@@ -157,11 +159,10 @@ export function TreasureChest({ type = '10K' }) {
     return null
   }
 
-  // Configuration based on type
-  // Model is ~4.2 units wide, scale down to fit in maze cells
+  // Configuration based on type - REDUCED BY 40%
   const glowColor = type === '10K' ? '#ffd700' : '#ff00ff'
   const chestColor = type === '10K' ? '#8B4513' : '#4B0082'
-  const scale = type === '10K' ? 0.25 : 0.35  // Adjusted for ~4.2 unit model
+  const scale = type === '10K' ? 0.15 : 0.21  // Reduced from 0.25/0.35
 
   return (
     <group position={[x, 0, z]}>
