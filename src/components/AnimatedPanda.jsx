@@ -221,7 +221,7 @@ function FBXPanda({ isMoving, hasWon, scale }) {
 }
 
 // Main component with Suspense fallback
-export function AnimatedPanda({ isMoving, hasWon, scale = 0.008 }) {
+export function AnimatedPanda({ isMoving, hasWon, scale = 0.003 }) {
   const [useFallback, setUseFallback] = useState(false)
 
   // If FBX fails, use fallback
