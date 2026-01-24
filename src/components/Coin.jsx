@@ -1,95 +1,86 @@
 
 import { useRef, useMemo } from 'react'
 import { useFrame } from '@react-three/fiber'
+import { useGLTF } from '@react-three/drei'
 import * as THREE from 'three'
 import { useGameStore } from '../stores/gameStore'
 
 // ============================================
-// COIN CONFIGURATIONS - Bright metallic colors
+// CRYSTAL CONFIGURATIONS - Map point values to GLB files
 // ============================================
-const COIN_CONFIG = {
+const CRYSTAL_CONFIG = {
   100: { 
-    name: 'Bronze', 
-    color: '#cd7f32', 
-    emissive: '#8b4513',
-    size: 0.35
+    model: '/models/toon_style_-_crystal.glb',
+    scale: 0.8,
+    glowColor: '#00ffff',
+    name: 'Toon Crystal'
   },
   250: { 
-    name: 'Silver', 
-    color: '#e8e8e8', 
-    emissive: '#a0a0a0',
-    size: 0.4
+    model: '/models/stylized_crystal.glb',
+    scale: 1.0,
+    glowColor: '#ff00ff',
+    name: 'Stylized Crystal'
   },
   500: { 
-    name: 'Gold', 
-    color: '#ffd700', 
-    emissive: '#ff8c00',
-    size: 0.45
+    model: '/models/orange_crystal.glb',
+    scale: 0.8,
+    glowColor: '#ff8800',
+    name: 'Orange Crystal'
   },
   1000: { 
-    name: 'Platinum', 
-    color: '#e0ffff', 
-    emissive: '#87ceeb',
-    size: 0.5
+    model: '/models/crystal_heart.glb',
+    scale: 0.6,
+    glowColor: '#ff0066',
+    name: 'Crystal Heart'
   }
 }
 
+// Preload all crystal models
+Object.values(CRYSTAL_CONFIG).forEach(config => {
+  useGLTF.preload(config.model)
+})
+
 // ============================================
-// PROCEDURAL COIN - Bright, shiny, always works
+// CRYSTAL MODEL COMPONENT - Loads and displays GLB
 // ============================================
-function ProceduralCoin({ color, emissive, size }) {
-  return (
-    <group>
-      {/* Main coin body */}
-      <mesh rotation={[Math.PI / 2, 0, 0]} castShadow>
-        <cylinderGeometry args={[size, size, 0.08, 32]} />
-        <meshStandardMaterial
-          color={color}
-          metalness={0.95}
-          roughness={0.05}
-          emissive={emissive}
-          emissiveIntensity={0.6}
-        />
-      </mesh>
-      {/* Inner ring detail */}
-      <mesh rotation={[Math.PI / 2, 0, 0]}>
-        <torusGeometry args={[size * 0.7, 0.02, 8, 32]} />
-        <meshStandardMaterial
-          color={emissive}
-          metalness={0.9}
-          roughness={0.1}
-          emissive={emissive}
-          emissiveIntensity={0.8}
-        />
-      </mesh>
-      {/* Center emblem */}
-      <mesh rotation={[Math.PI / 2, 0, 0]} position={[0, 0.05, 0]}>
-        <cylinderGeometry args={[size * 0.3, size * 0.3, 0.02, 6]} />
-        <meshStandardMaterial
-          color={emissive}
-          metalness={0.9}
-          roughness={0.1}
-          emissive={emissive}
-          emissiveIntensity={1.0}
-        />
-      </mesh>
-    </group>
-  )
+function CrystalModel({ modelPath, scale }) {
+  const { scene } = useGLTF(modelPath)
+
+  const clonedScene = useMemo(() => {
+    const clone = scene.clone()
+    // Enhance materials for better visibility
+    clone.traverse((child) => {
+      if (child.isMesh) {
+        child.castShadow = true
+        child.receiveShadow = true
+        // Make materials more emissive/bright if they exist
+        if (child.material) {
+          const mat = child.material.clone()
+          mat.emissiveIntensity = 0.5
+          if (!mat.emissive) mat.emissive = new THREE.Color(0x444444)
+          child.material = mat
+        }
+      }
+    })
+    return clone
+  }, [scene])
+
+  return <primitive object={clonedScene} scale={scale} />
 }
 
 // ============================================
-// ANIMATED COIN WRAPPER - Handles spin & float
-// Height raised to 2.5 so player can see coins
+// ANIMATED CRYSTAL WRAPPER - Handles rotation & float
+// Height at 2.5 (panda head height)
 // ============================================
-function AnimatedCoinWrapper({ children, id }) {
+function AnimatedCrystal({ children, id }) {
   const groupRef = useRef()
 
   useFrame((state) => {
     if (groupRef.current) {
-      // Spin
-      groupRef.current.rotation.y += 0.05
-      // Float up and down - raised to 2.5 (panda eye level)
-      groupRef.current.position.y = 2.5 + Math.sin(state.clock.elapsedTime * 2 + id) * 0.2
+      // Rotate
+      groupRef.current.rotation.y += 0.03
+      // Float up and down at head height (2.5)
+      groupRef.current.position.y = 2.5 + Math.sin(state.clock.elapsedTime * 2 + id) * 0.3
     }
   })
 
@@ -101,7 +92,7 @@ function AnimatedCoinWrapper({ children, id }) {
 }
 
 // ============================================
-// GROUND GLOW - Circle under coin
+// GROUND GLOW - Circle under crystal
 // ============================================
 function GroundGlow({ color }) {
   const glowRef = useRef()
@@ -115,75 +106,39 @@ function GroundGlow({ color }) {
 
   return (
     <mesh ref={glowRef} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.05, 0]}>
-      <circleGeometry args={[0.8, 32]} />
+      <circleGeometry args={[1.0, 32]} />
       <meshBasicMaterial color={color} transparent opacity={0.4} />
     </mesh>
   )
 }
 
 // ============================================
-// SPARKLE PARTICLES around coin
-// ============================================
-function Sparkles({ color }) {
-  const groupRef = useRef()
-
-  useFrame((state) => {
-    if (groupRef.current) {
-      groupRef.current.rotation.y += 0.02
-    }
-  })
-
-  return (
-    <group ref={groupRef}>
-      {[0, 1, 2, 3, 4, 5].map((i) => {
-        const angle = (i / 6) * Math.PI * 2
-        const radius = 0.6
-        return (
-          <mesh 
-            key={i} 
-            position={[
-              Math.cos(angle) * radius, 
-              0, 
-              Math.sin(angle) * radius
-            ]}
-          >
-            <sphereGeometry args={[0.03, 8, 8]} />
-            <meshBasicMaterial color={color} />
-          </mesh>
-        )
-      })}
-    </group>
-  )
-}
-
-// ============================================
-// MAIN COIN COMPONENT
+// MAIN COIN/CRYSTAL COMPONENT
 // ============================================
 export function Coin({ id, x, z, value, collected }) {
   // Don't render if collected
   if (collected) return null
 
-  // Get config for this coin value
-  const config = COIN_CONFIG[value] || COIN_CONFIG[100]
-  const { color, emissive, size } = config
+  // Get config for this crystal value
+  const config = CRYSTAL_CONFIG[value] || CRYSTAL_CONFIG[100]
+  const { model, scale, glowColor } = config
 
   return (
     <group position={[x, 0, z]}>
       {/* Ground glow */}
-      <GroundGlow color={color} />
+      <GroundGlow color={glowColor} />
 
-      {/* Animated coin */}
-      <AnimatedCoinWrapper id={id}>
-        <ProceduralCoin color={color} emissive={emissive} size={size} />
-        <Sparkles color={emissive} />
-      </AnimatedCoinWrapper>
+      {/* Animated crystal - NO SUSPENSE/FALLBACK to avoid overlay */}
+      <AnimatedCrystal id={id}>
+        <CrystalModel modelPath={model} scale={scale} />
+      </AnimatedCrystal>
 
-      {/* Point light to make coin glow */}
+      {/* Point light to make crystal glow */}
       <pointLight
         position={[0, 2.5, 0]}
-        color={color}
-        intensity={0.5}
-        distance={3}
+        color={glowColor}
+        intensity={0.8}
+        distance={4}
       />
     </group>
   )
