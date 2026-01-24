@@ -2,7 +2,7 @@ import { useGameStore } from '../stores/gameStore'
 import { SoundManager } from '../utils/SoundManager'
 import './GameMenu.css'
 
-const VERSION = '1.1'
+const VERSION = '1.5'
 
 export function GameMenu() {
   const gameState = useGameStore(state => state.gameState)
