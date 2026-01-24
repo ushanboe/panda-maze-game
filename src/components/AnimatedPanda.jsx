@@ -1,9 +1,10 @@
 
-import { useRef, useEffect, useMemo } from 'react'
+import { useRef, useEffect, useMemo, useState } from 'react'
 import { useFrame } from '@react-three/fiber'
 import { useFBX } from '@react-three/drei'
 import * as THREE from 'three'
 import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js'
+import { useGameStore } from '../stores/gameStore'
 
 // Fix Mixamo bone names - remove colons from track names
 function fixMixamoBoneNames(clip) {
@@ -13,11 +14,17 @@ function fixMixamoBoneNames(clip) {
   return clip
 }
 
-export function AnimatedPanda({ isMoving, hasWon, scale = 0.0012 }) {
+export function AnimatedPanda({ isMoving, hasWon, scale = 0.007 }) {
   const groupRef = useRef()
   const mixerRef = useRef(null)
   const actionsRef = useRef({})
   const currentActionRef = useRef(null)
+
+  // Track caught state for disappear animation
+  const playerCaught = useGameStore(state => state.playerCaught)
+  const [opacity, setOpacity] = useState(1)
+  const [disappearScale, setDisappearScale] = useState(1)
+  const materialsRef = useRef([])
 
   // Load FBX models
   const idleFbx = useFBX('/models/panda_idle.fbx')
@@ -36,11 +43,28 @@ export function AnimatedPanda({ isMoving, hasWon, scale = 0.0012 }) {
       if (child.isMesh) {
         child.castShadow = true
         child.receiveShadow = true
+        // Make material transparent-capable for disappear effect
+        if (child.material) {
+          child.material = child.material.clone()
+          child.material.transparent = true
+        }
       }
     })
 
     return clone
   }, [idleFbx])
+
+  // Collect materials for opacity animation
+  useEffect(() => {
+    if (!clonedModel) return
+    const mats = []
+    clonedModel.traverse((child) => {
+      if (child.isMesh && child.material) {
+        mats.push(child.material)
+      }
+    })
+    materialsRef.current = mats
+  }, [clonedModel])
 
   // Setup animation mixer and actions
   useEffect(() => {
@@ -112,6 +136,27 @@ export function AnimatedPanda({ isMoving, hasWon, scale = 0.0012 }) {
       groupRef.current.rotation.y += delta * 5
       groupRef.current.position.y = Math.abs(Math.sin(state.clock.elapsedTime * 8)) * 0.3
     }
+
+    // Caught by ghost - disappear animation
+    if (playerCaught && groupRef.current) {
+      // Spin fast and shrink
+      groupRef.current.rotation.y += delta * 15
+
+      // Shrink and fade
+      const newScale = Math.max(0, disappearScale - delta * 1.5)
+      setDisappearScale(newScale)
+
+      const newOpacity = Math.max(0, opacity - delta * 1.2)
+      setOpacity(newOpacity)
+
+      // Update materials opacity
+      materialsRef.current.forEach(mat => {
+        mat.opacity = newOpacity
+      })
+
+      // Float up while disappearing
+      groupRef.current.position.y += delta * 3
+    }
   })
 
   if (!clonedModel) {
@@ -124,8 +169,15 @@ export function AnimatedPanda({ isMoving, hasWon, scale = 0.0012 }) {
     )
   }
 
+  // Don't render if fully disappeared
+  if (playerCaught && disappearScale <= 0) {
+    return null
+  }
+
+  const finalScale = playerCaught ? scale * disappearScale : scale
+
   return (
-    <group ref={groupRef} scale={[scale, scale, scale]} position={[0, 0, 0]}>
+    <group ref={groupRef} scale={[finalScale, finalScale, finalScale]} position={[0, 0, 0]}>
       <primitive object={clonedModel} />
     </group>
   )

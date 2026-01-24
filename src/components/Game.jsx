@@ -11,6 +11,7 @@ import { ScoreDisplay } from './ScoreDisplay'
 import { PointPopups } from './PointPopup'
 import { Coins } from './Coin'
 import { TreasureChest } from './TreasureChest'
+import { Ghost } from './Ghost'
 import { generateMaze, getMazeWalls, gridToWorld } from '../utils/mazeGenerator'
 import { useGameStore } from '../stores/gameStore'
 import { SoundManager } from '../utils/SoundManager'
@@ -49,6 +50,7 @@ function Lights() {
 export function Game() {
   const gameState = useGameStore(state => state.gameState)
   const winGame = useGameStore(state => state.winGame)
+  const catchPlayer = useGameStore(state => state.catchPlayer)
   const prevGameState = useRef(gameState)
 
   // Ref to hold the setDirection function from Player
@@ -82,7 +84,7 @@ export function Game() {
       SoundManager.gameStart()
     }
     // Game lost
-    if (gameState === 'lost' && prevGameState.current === 'playing') {
+    if ((gameState === 'lost' || gameState === 'caught') && prevGameState.current === 'playing') {
       SoundManager.gameLose()
     }
     prevGameState.current = gameState
@@ -97,6 +99,10 @@ export function Game() {
 
   const handleReachExit = () => {
     winGame()
+  }
+
+  const handleGhostCatch = () => {
+    catchPlayer()
   }
 
   // Handle touch control direction
@@ -131,12 +137,19 @@ export function Game() {
         )}
 
         {gameState === 'playing' && (
-          <Player
-            mazeData={mazeData}
-            walls={walls}
-            onReachExit={handleReachExit}
-            onDirectionRef={directionRef}
-          />
+          <>
+            <Player
+              mazeData={mazeData}
+              walls={walls}
+              onReachExit={handleReachExit}
+              onDirectionRef={directionRef}
+            />
+            <Ghost
+              mazeData={mazeData}
+              walls={walls}
+              onCatchPlayer={handleGhostCatch}
+            />
+          </>
         )}
       </Canvas>
 

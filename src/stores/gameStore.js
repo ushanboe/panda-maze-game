@@ -4,8 +4,11 @@ const GAME_DURATION = 180 // 3 minutes in seconds
 
 export const useGameStore = create((set, get) => ({
   // Game state
-  gameState: 'menu', // 'menu', 'playing', 'won', 'lost'
+  gameState: 'menu', // 'menu', 'playing', 'won', 'lost', 'caught'
   timeRemaining: GAME_DURATION,
+
+  // Player caught by ghost
+  playerCaught: false,
 
   // Player state
   playerPosition: { x: 0, z: 0 },
@@ -43,7 +46,8 @@ export const useGameStore = create((set, get) => ({
     pointPopups: [],
     coinsCollected: 0,
     chestsCollected: 0,
-    timeTaken: 0
+    timeTaken: 0,
+    playerCaught: false
   }),
 
   resetGame: () => set({
@@ -57,7 +61,8 @@ export const useGameStore = create((set, get) => ({
     pointPopups: [],
     coinsCollected: 0,
     chestsCollected: 0,
-    timeTaken: 0
+    timeTaken: 0,
+    playerCaught: false
   }),
 
   winGame: () => {
@@ -68,6 +73,20 @@ export const useGameStore = create((set, get) => ({
 
   loseGame: () => {
     set({ gameState: 'lost', timeTaken: GAME_DURATION })
+  },
+
+  // Ghost catches player - triggers disappear animation then game over
+  catchPlayer: () => {
+    const { timeRemaining, gameState } = get()
+    if (gameState !== 'playing') return
+
+    const timeTaken = GAME_DURATION - timeRemaining
+    set({ playerCaught: true })
+
+    // Delay game over to show disappear animation
+    setTimeout(() => {
+      set({ gameState: 'caught', timeTaken })
+    }, 1500)  // 1.5 second delay to see panda disappear
   },
 
   decrementTime: () => {

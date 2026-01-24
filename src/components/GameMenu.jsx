@@ -2,7 +2,7 @@ import { useGameStore } from '../stores/gameStore'
 import { SoundManager } from '../utils/SoundManager'
 import './GameMenu.css'
 
-const VERSION = '2.0'
+const VERSION = '2.1'
 
 export function GameMenu() {
   const gameState = useGameStore(state => state.gameState)
@@ -56,13 +56,17 @@ export function GameMenu() {
                 <span>Collect coins & treasure</span>
               </div>
               <div className="instruction-item">
+                <span className="instruction-icon">👻</span>
+                <span>Avoid the ghost!</span>
+              </div>
+              <div className="instruction-item">
                 <span className="instruction-icon">✨</span>
                 <span>Find the green portal!</span>
               </div>
             </div>
 
-            <button 
-              className="game-btn game-btn-start" 
+            <button
+              className="game-btn game-btn-start"
               onClick={handleStart}
               onTouchEnd={handleStart}
             >
@@ -113,8 +117,8 @@ export function GameMenu() {
               </div>
             </div>
 
-            <button 
-              className="game-btn game-btn-restart" 
+            <button
+              className="game-btn game-btn-restart"
               onClick={handleStart}
               onTouchEnd={handleStart}
             >
@@ -123,7 +127,7 @@ export function GameMenu() {
           </>
         )}
 
-        {/* Lose Screen */}
+        {/* Lose Screen - Time Up */}
         {gameState === 'lost' && (
           <>
             <div className="result-screen lose">
@@ -150,8 +154,50 @@ export function GameMenu() {
               </div>
             </div>
 
-            <button 
-              className="game-btn game-btn-restart" 
+            <button
+              className="game-btn game-btn-restart"
+              onClick={handleStart}
+              onTouchEnd={handleStart}
+            >
+              TRY AGAIN
+            </button>
+          </>
+        )}
+
+        {/* Caught by Ghost Screen */}
+        {gameState === 'caught' && (
+          <>
+            <div className="result-screen lose">
+              <span className="result-emoji">👻</span>
+              <h1 className="result-title">CAUGHT!</h1>
+              <p className="result-subtitle">The ghost got the panda!</p>
+
+              <div className="stats-container">
+                <div className="stat-row">
+                  <span className="stat-icon">⏱️</span>
+                  <span className="stat-name">Survived</span>
+                  <span className="stat-val">{formatTime(timeTaken)}</span>
+                </div>
+                <div className="stat-row">
+                  <span className="stat-icon">🪙</span>
+                  <span className="stat-name">Coins</span>
+                  <span className="stat-val">{coinsCollected}</span>
+                </div>
+                <div className="stat-row">
+                  <span className="stat-icon">📦</span>
+                  <span className="stat-name">Chests</span>
+                  <span className="stat-val">{chestsCollected}</span>
+                </div>
+                <div className="stat-row total">
+                  <span className="stat-icon">💰</span>
+                  <span className="stat-name">Points</span>
+                  <span className="stat-val">{score.toLocaleString()}</span>
+                </div>
+              </div>
+            </div>
+
+            <button
+              className="game-btn game-btn-restart"
               onClick={handleStart}
               onTouchEnd={handleStart}
             >
