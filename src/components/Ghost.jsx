@@ -235,7 +235,7 @@ export function Ghost({ mazeData, walls, onCatchPlayer }) {
   if (!initialized) return null
 
   // Scale factor - 3x bigger than before
-  const s = 3
+  const s = 2.55
 
   return (
     <group ref={groupRef} position={[ghostWorldPos.x, 1.5, ghostWorldPos.z]} scale={[s, s, s]}>

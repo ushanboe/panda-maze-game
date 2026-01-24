@@ -34,7 +34,7 @@ export function AnimatedPanda({ isMoving, hasWon, scale = 0.007 }) {
   })
 
   // Scale factor - 3x bigger than before
-  const s = 3
+  const s = 2.55
 
   return (
     <group ref={groupRef} scale={[s, s, s]}>
