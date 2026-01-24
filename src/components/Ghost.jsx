@@ -3,7 +3,7 @@ import { useRef, useEffect, useMemo } from 'react'
 import { useFrame } from '@react-three/fiber'
 import { useFBX } from '@react-three/drei'
 import * as THREE from 'three'
-import { clone as cloneSkeleton } from 'three/examples/jsm/utils/SkeletonUtils.js'
+import { SkeletonUtils } from 'three-stdlib'
 import { useGameStore } from '../stores/gameStore'
 
 const CELL_SIZE = 2
@@ -81,7 +81,7 @@ export function Ghost({ mazeData, walls, onCatchPlayer }) {
   // Clone the model
   const clonedModel = useMemo(() => {
     if (!ghostFbx) return null
-    const clone = cloneSkeleton(ghostFbx)
+    const clone = SkeletonUtils.clone(ghostFbx)
 
     clone.traverse((child) => {
       if (child.isMesh) {
